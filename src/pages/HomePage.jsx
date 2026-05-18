@@ -64,10 +64,13 @@ export default function HomePage() {
     document.documentElement.lang = lang;
   }, [lang]);
 
+  const stickyCtaEnabled = siteConfig?.stickyMobileCta?.enabled !== false;
+
   useEffect(() => {
+    if (!stickyCtaEnabled) return undefined;
     document.documentElement.classList.add('has-sticky-mobile-cta');
     return () => document.documentElement.classList.remove('has-sticky-mobile-cta');
-  }, []);
+  }, [stickyCtaEnabled]);
 
   const toggleLang = () => {
     const next = lang === 'ar' ? 'en' : 'ar';
@@ -114,7 +117,9 @@ export default function HomePage() {
       </main>
 
       <Footer t={t} lang={lang} />
-      <StickyMobileCTA t={t} lang={lang} rate={rate} usdtAmount={usdtAmount} />
+      {stickyCtaEnabled ? (
+        <StickyMobileCTA t={t} lang={lang} rate={rate} usdtAmount={usdtAmount} />
+      ) : null}
     </div>
   );
 }

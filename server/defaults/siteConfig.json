@@ -21,5 +21,8 @@
     "okx": "https://www.okx.com/trade-spot/usdt-usdc",
     "contact": "https://t.me/TETHER_IQ"
   },
-  "faq": []
+  "faq": [],
+  "stickyMobileCta": {
+    "enabled": true
+  }
 }

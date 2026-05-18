@@ -690,6 +690,9 @@ export function registerAdminApi(app) {
       if (body.hero != null) cfg.hero = { ...(cfg.hero || {}), ...body.hero };
       if (body.links != null) cfg.links = { ...(cfg.links || {}), ...body.links };
       if (body.theme != null) cfg.theme = mergeSiteTheme(cfg.theme, body.theme);
+      if (body.stickyMobileCta != null) {
+        cfg.stickyMobileCta = { ...(cfg.stickyMobileCta || {}), ...body.stickyMobileCta };
+      }
       if (Array.isArray(body.faq)) cfg.faq = body.faq;
       await saveSiteConfig(cfg);
       res.json({ ok: true, config: cfg });

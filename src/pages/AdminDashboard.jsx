@@ -853,6 +853,19 @@ export default function AdminDashboard() {
                   onChange={(theme) => setSiteConfig({ ...siteConfig, theme })}
                 />
                 <hr className="admin-divider" />
+                <h3 className="admin-subsection-title">واجهة الموقع</h3>
+                <label className="admin-check">
+                  <input
+                    type="checkbox"
+                    checked={siteConfig.stickyMobileCta?.enabled !== false}
+                    onChange={(e) => setSiteConfig({
+                      ...siteConfig,
+                      stickyMobileCta: { enabled: e.target.checked },
+                    })}
+                  />
+                  إظهار شريط «اشترِ الآن» السفلي على الجوال
+                </label>
+                <hr className="admin-divider" />
                 <h3 className="admin-subsection-title">صيانة ومحتوى</h3>
                 <label className="admin-check">
                   <input
