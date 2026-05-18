@@ -376,6 +376,11 @@ const METHOD_FIELD_MAP = {
 };
 
 export function registerAdminApi(app) {
+  app.get('/api/admin/auth/check', (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    res.json({ ok: true });
+  });
+
   app.get('/api/admin/overview', async (req, res) => {
     if (!requireAdmin(req, res)) return;
     try {

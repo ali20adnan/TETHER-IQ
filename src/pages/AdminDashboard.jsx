@@ -5,6 +5,8 @@ import {
   storeLoginCode,
   clearStoredLoginCode,
   adminRequest,
+  verifyAdminLoginCode,
+  AdminAuthError,
   crmReportUrl,
   downloadBlob,
   exportCrmCsv,
@@ -163,6 +165,14 @@ export default function AdminDashboard() {
   const limit = 30;
   const code = loginCode.trim();
 
+  const handleAuthFailure = useCallback((message) => {
+    clearStoredLoginCode();
+    setSaved(false);
+    setLoginCode('');
+    setErr(message || 'انتهت الجلسة أو رمز الدخول غير صحيح. سجّل الدخول مرة أخرى.');
+    setOk('');
+  }, []);
+
   const run = useCallback(async (fn, silent = false) => {
     if (!code) return;
     if (!silent) setLoading(true);
@@ -170,11 +180,15 @@ export default function AdminDashboard() {
     try {
       await fn();
     } catch (e) {
+      if (e instanceof AdminAuthError || e?.status === 401) {
+        handleAuthFailure(e?.message);
+        return;
+      }
       setErr(String(e?.message || e));
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [code]);
+  }, [code, handleAuthFailure]);
 
   const loadOverview = useCallback(() => run(async () => {
     const o = await adminRequest('/api/admin/overview', code);
@@ -260,19 +274,55 @@ export default function AdminDashboard() {
   }, [saved, code, tab, loadOverview, loadCrm, loadOrderMgmt, loadPayment, loadSite, loadMarketing, loadBlocked, loadChat, loadCc, loadBotAdmins, run]);
 
   useEffect(() => {
+    if (!saved || !code) return;
     refreshTab();
-  }, [saved, tab, refreshTab]);
+  }, [saved, tab, refreshTab, code]);
+
+  useEffect(() => {
+    if (!saved || !code) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await verifyAdminLoginCode(code);
+      } catch (e) {
+        if (!cancelled && (e instanceof AdminAuthError || e?.status === 401)) {
+          handleAuthFailure(e?.message);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [saved, code, handleAuthFailure]);
 
   useEffect(() => {
     if (saved && tab === 'crm' && code) loadCrm();
   }, [vOff, oOff, saved, tab, code, loadCrm]);
 
-  const persistLogin = () => {
-    storeLoginCode(code);
-    setSaved(true);
-    setOk('تم تسجيل الدخول');
+  const persistLogin = async () => {
+    const next = code.trim();
+    if (!next) {
+      setErr('أدخل رمز الدخول');
+      return;
+    }
+    setLoading(true);
     setErr('');
-    refreshTab();
+    setOk('');
+    try {
+      await verifyAdminLoginCode(next);
+      storeLoginCode(next);
+      setSaved(true);
+      setOk('تم تسجيل الدخول');
+    } catch (e) {
+      if (e instanceof AdminAuthError || e?.status === 401) {
+        setErr(
+          'رمز الدخول مرفوض من السيرفر. تأكد أنه يطابق ADMIN_CRM_TOKEN أو ADMIN_LOGIN_CODE في ملف .env على السيرفر.',
+        );
+      } else {
+        setErr(String(e?.message || e));
+      }
+      setSaved(false);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const logout = () => {
@@ -373,11 +423,20 @@ export default function AdminDashboard() {
           <div className="admin-app">
             <aside className="admin-sidebar glass-panel" aria-label="القائمة">
               <div className="admin-sidebar__brand">
-                <span className="admin-sidebar__logo" aria-hidden>TIQ</span>
-                <div>
-                  <strong>TETHER IQ</strong>
-                  <small>لوحة الإدارة</small>
-                </div>
+                <Link to="/" className="admin-sidebar__logo-link" aria-label="TETHER IQ">
+                  <picture>
+                    <source type="image/webp" srcSet="/logo.webp" />
+                    <img
+                      className="admin-sidebar__logo-img"
+                      src="/logo.png"
+                      alt="TETHER IQ"
+                      width={140}
+                      height={42}
+                      decoding="async"
+                    />
+                  </picture>
+                </Link>
+                <p className="admin-sidebar__brand-tag">لوحة الإدارة</p>
               </div>
               <nav className="admin-sidebar__nav">
                 {TABS.map((t) => (
