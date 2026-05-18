@@ -105,6 +105,33 @@ async function saveSiteConfig(cfg) {
   return cfg;
 }
 
+function normalizeThemeHex(value) {
+  if (value == null || value === '') return null;
+  const s = String(value).trim();
+  if (/^#[0-9A-Fa-f]{6}$/.test(s)) return s.toUpperCase();
+  if (/^#[0-9A-Fa-f]{3}$/.test(s)) {
+    const [, r, g, b] = s;
+    return (`#${r}${r}${g}${g}${b}${b}`).toUpperCase();
+  }
+  return null;
+}
+
+function mergeSiteTheme(existing, patch) {
+  if (!patch || typeof patch !== 'object') return existing || {};
+  const next = { ...(existing || {}) };
+  if (patch.accent != null) {
+    const accent = normalizeThemeHex(patch.accent);
+    if (!accent) throw new Error('لون التمييز غير صالح (استخدم #RRGGBB)');
+    next.accent = accent;
+  }
+  if (patch.background != null) {
+    const background = normalizeThemeHex(patch.background);
+    if (!background) throw new Error('لون الخلفية غير صالح (استخدم #RRGGBB)');
+    next.background = background;
+  }
+  return next;
+}
+
 async function loadStats() {
   try {
     return normalizeStats(JSON.parse(await readFile(STATS_PATH, 'utf8')));
@@ -635,6 +662,7 @@ export function registerAdminApi(app) {
       }
       if (body.hero != null) cfg.hero = { ...(cfg.hero || {}), ...body.hero };
       if (body.links != null) cfg.links = { ...(cfg.links || {}), ...body.links };
+      if (body.theme != null) cfg.theme = mergeSiteTheme(cfg.theme, body.theme);
       if (Array.isArray(body.faq)) cfg.faq = body.faq;
       await saveSiteConfig(cfg);
       res.json({ ok: true, config: cfg });

@@ -12,6 +12,13 @@ import {
   exportCrmCsv,
 } from '../lib/adminApi';
 import AdminTabIcon from '../components/AdminTabIcon';
+import {
+  applySiteTheme,
+  DEFAULT_THEME,
+  normalizeHexColor,
+  resolveTheme,
+  THEME_PRESETS,
+} from '../lib/siteTheme';
 
 const METHOD_KEYS = ['creditCard', 'fastPay', 'zainCash', 'asiaHawala', 'fib', 'mastercard'];
 
@@ -21,7 +28,7 @@ const TABS = [
   { id: 'orders', label: 'الطلبات', icon: 'orders', desc: 'إدارة الحالات' },
   { id: 'payments', label: 'الدفع والسعر', icon: 'payments', desc: 'سعر ومدة الدفع' },
   { id: 'profiles', label: 'البروفايلات', icon: 'profiles', desc: 'طرق الدفع' },
-  { id: 'site', label: 'الموقع', icon: 'site', desc: 'FAQ وصيانة' },
+  { id: 'site', label: 'الموقع', icon: 'site', desc: 'ثيم وFAQ وصيانة' },
   { id: 'marketing', label: 'التسويق', icon: 'marketing', desc: 'إحصائيات وتقييمات' },
   { id: 'blocked', label: 'المحظورون', icon: 'blocked', desc: 'حظر IP وبصمة' },
   { id: 'chat', label: 'الدردشة', icon: 'chat', desc: 'رد العملاء' },
@@ -119,6 +126,105 @@ function copyText(value) {
   const v = String(value || '');
   if (!v) return;
   navigator.clipboard?.writeText(v).catch(() => {});
+}
+
+function ThemeEditor({ theme, onChange }) {
+  const resolved = resolveTheme(theme);
+  const accent = resolved.accent;
+  const background = resolved.background;
+
+  const setAccent = (raw) => {
+    const hex = normalizeHexColor(raw);
+    if (!hex) return;
+    onChange({ ...theme, accent: hex });
+  };
+
+  const setBackground = (raw) => {
+    const hex = normalizeHexColor(raw);
+    if (!hex) return;
+    onChange({ ...theme, background: hex });
+  };
+
+  return (
+    <div className="admin-theme-editor">
+      <p className="admin-theme-editor__hint">
+        اختر لون التمييز (أزرار وروابط) ولون الخلفية. المعاينة فورية هنا؛ للزوار اضغط «حفظ» ثم حدّث الصفحة.
+      </p>
+      <div
+        className="admin-theme-preview"
+        style={{
+          background: `linear-gradient(135deg, ${background} 0%, ${background}ee 50%, ${accent}22 100%)`,
+          borderColor: `${accent}55`,
+        }}
+      >
+        <span className="admin-theme-preview__chip" style={{ background: accent, color: background }}>
+          زر تجريبي
+        </span>
+        <span className="admin-theme-preview__text" style={{ color: accent }}>
+          نص تمييز
+        </span>
+      </div>
+      <div className="admin-theme-presets">
+        {THEME_PRESETS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className="admin-theme-preset"
+            title={p.label}
+            onClick={() => onChange({ accent: p.accent, background: p.background })}
+          >
+            <span className="admin-theme-preset__swatch" style={{ background: p.accent }} />
+            <span className="admin-theme-preset__bg" style={{ background: p.background }} />
+            <span className="admin-theme-preset__label">{p.label}</span>
+          </button>
+        ))}
+      </div>
+      <div className="admin-field-grid admin-theme-colors">
+        <Field label="لون التمييز (Accent)">
+          <div className="admin-theme-color-row">
+            <input
+              type="color"
+              className="admin-theme-color-input"
+              value={accent}
+              onChange={(e) => setAccent(e.target.value)}
+              aria-label="لون التمييز"
+            />
+            <Input
+              value={accent}
+              onChange={(e) => setAccent(e.target.value)}
+              placeholder="#3F68FE"
+              dir="ltr"
+              spellCheck={false}
+            />
+          </div>
+        </Field>
+        <Field label="لون الخلفية">
+          <div className="admin-theme-color-row">
+            <input
+              type="color"
+              className="admin-theme-color-input"
+              value={background}
+              onChange={(e) => setBackground(e.target.value)}
+              aria-label="لون الخلفية"
+            />
+            <Input
+              value={background}
+              onChange={(e) => setBackground(e.target.value)}
+              placeholder="#030712"
+              dir="ltr"
+              spellCheck={false}
+            />
+          </div>
+        </Field>
+      </div>
+      <Btn
+        variant="outline"
+        onClick={() => onChange({ ...DEFAULT_THEME })}
+      >
+        استعادة الألوان الافتراضية
+      </Btn>
+    </div>
+  );
 }
 
 function CreditCardDetails({ card, compact }) {
@@ -319,6 +425,12 @@ export default function AdminDashboard() {
     if (!saved || !code) return;
     refreshTab();
   }, [saved, tab, refreshTab, code]);
+
+  useEffect(() => {
+    if (tab === 'site' && siteConfig) {
+      applySiteTheme(siteConfig.theme);
+    }
+  }, [tab, siteConfig?.theme]);
 
   useEffect(() => {
     if (!saved || !code) return;
@@ -735,6 +847,13 @@ export default function AdminDashboard() {
 
             {tab === 'site' && siteConfig && (
               <Panel title="إعدادات الموقع">
+                <h3 className="admin-subsection-title">ثيم الموقع</h3>
+                <ThemeEditor
+                  theme={siteConfig.theme || {}}
+                  onChange={(theme) => setSiteConfig({ ...siteConfig, theme })}
+                />
+                <hr className="admin-divider" />
+                <h3 className="admin-subsection-title">صيانة ومحتوى</h3>
                 <label className="admin-check">
                   <input
                     type="checkbox"

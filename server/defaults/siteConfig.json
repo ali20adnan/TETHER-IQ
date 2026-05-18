@@ -1,4 +1,8 @@
 {
+  "theme": {
+    "accent": "#3F68FE",
+    "background": "#030712"
+  },
   "maintenance": {
     "enabled": false,
     "messageAr": "الموقع في وضع الصيانة، نعود قريباً.",
