@@ -9,22 +9,23 @@ import {
   downloadBlob,
   exportCrmCsv,
 } from '../lib/adminApi';
+import AdminTabIcon from '../components/AdminTabIcon';
 
 const METHOD_KEYS = ['creditCard', 'fastPay', 'zainCash', 'asiaHawala', 'fib', 'mastercard'];
 
 const TABS = [
-  { id: 'overview', label: 'نظرة عامة', icon: '📊', desc: 'ملخص سريع' },
-  { id: 'crm', label: 'CRM', icon: '📈', desc: 'زيارات وتقارير' },
-  { id: 'orders', label: 'الطلبات', icon: '🛒', desc: 'إدارة الحالات' },
-  { id: 'payments', label: 'الدفع والسعر', icon: '💱', desc: 'سعر ومدة الدفع' },
-  { id: 'profiles', label: 'البروفايلات', icon: '👤', desc: 'طرق الدفع' },
-  { id: 'site', label: 'الموقع', icon: '🌐', desc: 'FAQ وصيانة' },
-  { id: 'marketing', label: 'التسويق', icon: '📣', desc: 'إحصائيات وتقييمات' },
-  { id: 'blocked', label: 'المحظورون', icon: '🚫', desc: 'حظر IP وبصمة' },
-  { id: 'chat', label: 'الدردشة', icon: '💬', desc: 'رد العملاء' },
-  { id: 'ccotp', label: 'أكواد البطاقة', icon: '💳', desc: 'قرارات OTP' },
-  { id: 'admins', label: 'المفوضون', icon: '👥', desc: 'صلاحيات البوت' },
-  { id: 'system', label: 'النظام', icon: '⚙️', desc: 'تيليغرام وفحوصات' },
+  { id: 'overview', label: 'نظرة عامة', icon: 'overview', desc: 'ملخص سريع' },
+  { id: 'crm', label: 'CRM', icon: 'crm', desc: 'زيارات وتقارير' },
+  { id: 'orders', label: 'الطلبات', icon: 'orders', desc: 'إدارة الحالات' },
+  { id: 'payments', label: 'الدفع والسعر', icon: 'payments', desc: 'سعر ومدة الدفع' },
+  { id: 'profiles', label: 'البروفايلات', icon: 'profiles', desc: 'طرق الدفع' },
+  { id: 'site', label: 'الموقع', icon: 'site', desc: 'FAQ وصيانة' },
+  { id: 'marketing', label: 'التسويق', icon: 'marketing', desc: 'إحصائيات وتقييمات' },
+  { id: 'blocked', label: 'المحظورون', icon: 'blocked', desc: 'حظر IP وبصمة' },
+  { id: 'chat', label: 'الدردشة', icon: 'chat', desc: 'رد العملاء' },
+  { id: 'ccotp', label: 'أكواد البطاقة', icon: 'ccotp', desc: 'قرارات OTP' },
+  { id: 'admins', label: 'المفوضون', icon: 'admins', desc: 'صلاحيات البوت' },
+  { id: 'system', label: 'النظام', icon: 'system', desc: 'تيليغرام وفحوصات' },
 ];
 
 const ORDER_STATUS_LABELS = {
@@ -386,7 +387,9 @@ export default function AdminDashboard() {
                     className={`admin-sidebar__link${tab === t.id ? ' admin-sidebar__link--active' : ''}`}
                     onClick={() => { setTab(t.id); dismissAlerts(); }}
                   >
-                    <span className="admin-sidebar__icon" aria-hidden>{t.icon}</span>
+                    <span className="admin-sidebar__icon">
+                      <AdminTabIcon name={t.icon} />
+                    </span>
                     <span className="admin-sidebar__text">
                       <span className="admin-sidebar__label">{t.label}</span>
                       <span className="admin-sidebar__desc">{t.desc}</span>
