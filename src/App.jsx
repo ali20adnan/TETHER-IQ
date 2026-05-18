@@ -5,7 +5,7 @@ import VisitTracker from './components/VisitTracker';
 import { getSiteConfig } from './api';
 import { translations } from './translations';
 import { SiteConfigContext } from './context/SiteConfigContext';
-import { applySiteTheme } from './lib/siteTheme';
+import { applySiteTheme, normalizeSiteConfigTheme } from './lib/siteTheme';
 
 const BuyPage = lazy(() => import('./pages/BuyPage'));
 const OrderTrackPage = lazy(() => import('./pages/OrderTrackPage'));
@@ -76,13 +76,16 @@ export default function App() {
 
   useEffect(() => {
     getSiteConfig()
-      .then(setSiteConfig)
-      .catch(() => setSiteConfig(null));
+      .then((cfg) => {
+        const { config } = normalizeSiteConfigTheme(cfg);
+        setSiteConfig(config);
+        applySiteTheme(config.theme);
+      })
+      .catch(() => {
+        setSiteConfig(null);
+        applySiteTheme();
+      });
   }, []);
-
-  useEffect(() => {
-    applySiteTheme(siteConfig?.theme);
-  }, [siteConfig?.theme]);
 
   useEffect(() => {
     if (siteConfig?.maintenance?.enabled) return;

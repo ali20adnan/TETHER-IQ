@@ -43,7 +43,7 @@ function SavedOrdersCue({ t, lang }) {
         style={{
           padding: '0.85rem 1.25rem',
           textAlign: lang === 'ar' ? 'right' : 'left',
-          border: '1px solid rgba(0,229,255,0.2)',
+          border: '1px solid rgba(var(--accent-rgb),0.2)',
         }}
       >
         <Link to="/my-orders" style={{ color: 'var(--accent-primary)', fontWeight: 700, textDecoration: 'none' }}>

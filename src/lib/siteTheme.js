@@ -4,6 +4,9 @@ export const DEFAULT_THEME = {
   background: '#030712',
 };
 
+/** Previous brand accent — migrate saved configs to the new default. */
+export const LEGACY_ACCENT = '#00E5FF';
+
 const HEX6 = /^#[0-9A-Fa-f]{6}$/;
 const HEX3 = /^#[0-9A-Fa-f]{3}$/;
 
@@ -43,9 +46,22 @@ function rgba(hex, alpha) {
 }
 
 export function resolveTheme(theme) {
-  const accent = normalizeHexColor(theme?.accent) || DEFAULT_THEME.accent;
+  let accent = normalizeHexColor(theme?.accent) || DEFAULT_THEME.accent;
+  if (accent === LEGACY_ACCENT) accent = DEFAULT_THEME.accent;
   const background = normalizeHexColor(theme?.background) || DEFAULT_THEME.background;
   return { accent, background };
+}
+
+/** Merge theme into site config; migrates legacy cyan and fills missing theme. */
+export function normalizeSiteConfigTheme(cfg) {
+  const base = cfg && typeof cfg === 'object' ? cfg : {};
+  const theme = resolveTheme(base.theme);
+  const migrated = normalizeHexColor(base.theme?.accent) === LEGACY_ACCENT;
+  const filled = !base.theme?.accent;
+  return {
+    config: { ...base, theme },
+    changed: migrated || filled,
+  };
 }
 
 /** Apply theme colors to document CSS variables (public site + admin preview). */
@@ -54,9 +70,13 @@ export function applySiteTheme(theme) {
   const { accent, background } = resolveTheme(theme);
   const root = document.documentElement;
   const hover = mixHex(accent, '#FFFFFF', 0.22);
+  const gradientEnd = mixHex(accent, '#000000', 0.35);
+  const rgb = hexToRgb(accent);
   const bgSecondary = mixHex(background, '#FFFFFF', 0.08);
   const bgGlassRgb = hexToRgb(mixHex(background, '#FFFFFF', 0.06));
 
+  if (rgb) root.style.setProperty('--accent-rgb', `${rgb.r}, ${rgb.g}, ${rgb.b}`);
+  root.style.setProperty('--accent-gradient-end', gradientEnd);
   root.style.setProperty('--accent-primary', accent);
   root.style.setProperty('--accent-primary-hover', hover);
   root.style.setProperty('--accent-glow', rgba(accent, 0.35));
@@ -104,6 +124,8 @@ export function clearSiteThemeOverrides() {
     '--theme-grid-dot',
     '--theme-bg-mid',
     '--theme-bg-deep',
+    '--accent-rgb',
+    '--accent-gradient-end',
   ];
   keys.forEach((k) => root.style.removeProperty(k));
   delete root.dataset.siteTheme;

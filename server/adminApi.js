@@ -92,12 +92,39 @@ async function savePaymentDetails(details) {
   return next;
 }
 
+function migrateSiteConfigTheme(cfg) {
+  const base = cfg && typeof cfg === 'object' ? cfg : {};
+  const legacy = '#00E5FF';
+  const accent = String(base.theme?.accent || '').trim().toUpperCase();
+  const needsTheme = !accent || accent === legacy;
+  if (!needsTheme) return { cfg: base, migrated: false };
+  const next = {
+    ...base,
+    theme: {
+      ...(base.theme || {}),
+      accent: '#3F68FE',
+      background: base.theme?.background || '#030712',
+    },
+  };
+  return { cfg: next, migrated: true };
+}
+
 async function loadSiteConfig() {
+  let cfg;
   try {
-    return JSON.parse(await readFile(SITE_CONFIG_PATH, 'utf8'));
+    cfg = JSON.parse(await readFile(SITE_CONFIG_PATH, 'utf8'));
   } catch {
-    return { maintenance: { enabled: false }, hero: {}, links: {}, faq: [] };
+    return {
+      maintenance: { enabled: false },
+      hero: {},
+      links: {},
+      faq: [],
+      theme: { accent: '#3F68FE', background: '#030712' },
+    };
   }
+  const { cfg: next, migrated } = migrateSiteConfigTheme(cfg);
+  if (migrated) await saveSiteConfig(next);
+  return next;
 }
 
 async function saveSiteConfig(cfg) {

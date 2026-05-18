@@ -87,10 +87,10 @@ export default function CheckoutForm({ t, lang, usdtAmount }) {
           </div>
 
           <div style={{
-            background: 'rgba(0,229,255,0.05)',
+            background: 'rgba(var(--accent-rgb),0.05)',
             padding: '1rem',
             borderRadius: '8px',
-            border: '1px solid rgba(0,229,255,0.1)',
+            border: '1px solid rgba(var(--accent-rgb),0.1)',
             marginTop: '0.5rem'
           }}>
             <div className="flex justify-between items-center" style={{ flexDirection: isRtl ? 'row-reverse' : 'row' }}>
