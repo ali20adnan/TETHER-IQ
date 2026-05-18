@@ -52,10 +52,13 @@ export function getPaymentDetails() {
   return jsonFetch('/api/payment-details');
 }
 
-export function postAdminFixedRate(adminToken, fixedRate) {
+export function postAdminFixedRate(loginCode, fixedRate) {
   return jsonFetch('/api/admin/rate-fixed', {
     method: 'POST',
-    headers: { 'X-Admin-Crm-Token': adminToken },
+    headers: {
+      'X-Admin-Login-Code': loginCode,
+      'X-Admin-Crm-Token': loginCode,
+    },
     body: JSON.stringify({ fixedRate: Number(fixedRate) }),
   });
 }

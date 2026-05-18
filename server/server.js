@@ -71,6 +71,8 @@ import {
   getRequiredPermissionForCommand,
   BOT_PERMISSION_KEYS,
 } from './botPermissions.js';
+import { registerAdminApi } from './adminApi.js';
+import { checkAdminLogin, getAdminLoginSecret } from './adminAuth.js';
 
 const PAYMENT_METHOD_LABEL_TO_KEY = {
   'Zain Cash': 'zainCash',
@@ -338,15 +340,11 @@ if (corsOrigins.length > 0) {
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '8mb' }));
 
 function adminCrmToken() {
-  return String(process.env.ADMIN_CRM_TOKEN || '').trim();
+  return getAdminLoginSecret();
 }
 
 function checkAdminCrmAuth(req) {
-  const t = adminCrmToken();
-  if (!t) return false;
-  const header = req.headers['x-admin-crm-token'] || req.headers['x-admin-token'];
-  const q = req.query?.token;
-  return header === t || q === t;
+  return checkAdminLogin(req);
 }
 
 if (IS_PROD) {
@@ -968,6 +966,8 @@ async function maybeWarnSameIpAsBlockedFingerprint(clientIp, currentFingerprint)
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
+registerAdminApi(app);
+
 /**
  * يتحقق من getChat بنفس TELEGRAM_BOT_TOKEN ومعرّفات المحادثات كما في الإنتاج.
  * GET /api/admin/telegram-probe?token=ADMIN_CRM_TOKEN
@@ -1009,10 +1009,19 @@ app.get('/api/admin/telegram-probe', async (req, res) => {
         chatTitle: d?.ok ? title : null,
       };
     };
-    const [chatId] = await Promise.all([
-      probe('chat_id', telegramSupportChatId),
-    ]);
+    let chatId;
+    try {
+      chatId = await probe('chat_id', telegramSupportChatId);
+    } catch (probeErr) {
+      chatId = {
+        label: 'chat_id',
+        configured: Boolean(telegramSupportChatId()),
+        ok: false,
+        telegramDescription: String(probeErr?.message || probeErr),
+      };
+    }
     res.json({
+      ok: true,
       note: 'Single unified Telegram Chat ID for everything.',
       chatId,
     });

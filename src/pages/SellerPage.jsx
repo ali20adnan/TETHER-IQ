@@ -3,20 +3,14 @@ import { Link } from 'react-router-dom';
 import { getPaymentDetails, postAdminFixedRate } from '../api';
 import { translations } from '../translations';
 
-const TOKEN_KEY = 'seller_admin_crm_token';
+import { readStoredLoginCode, storeLoginCode } from '../lib/adminApi';
 
 export default function SellerPage() {
   const [lang, setLang] = useState(() => localStorage.getItem('lang') || 'ar');
   const t = translations[lang];
   const isRtl = lang === 'ar';
 
-  const [token, setToken] = useState(() => {
-    try {
-      return sessionStorage.getItem(TOKEN_KEY) || '';
-    } catch {
-      return '';
-    }
-  });
+  const [loginCode, setLoginCode] = useState(() => readStoredLoginCode());
   const [draft, setDraft] = useState('');
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
@@ -38,8 +32,8 @@ export default function SellerPage() {
     e.preventDefault();
     setMsg('');
     setErr('');
-    const tok = token.trim();
-    if (!tok) {
+    const code = loginCode.trim();
+    if (!code) {
       setErr(t.sellerNeedToken);
       return;
     }
@@ -49,12 +43,8 @@ export default function SellerPage() {
       return;
     }
     try {
-      const r = await postAdminFixedRate(tok, v);
-      try {
-        sessionStorage.setItem(TOKEN_KEY, tok);
-      } catch {
-        /* ignore */
-      }
+      const r = await postAdminFixedRate(code, v);
+      storeLoginCode(code);
       setDraft(String(r.rate ?? r.fixedRate ?? v));
       setMsg(t.sellerSaved);
     } catch (e2) {
@@ -88,8 +78,8 @@ export default function SellerPage() {
                 type="password"
                 className="input-control"
                 autoComplete="off"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
+                value={loginCode}
+                onChange={(e) => setLoginCode(e.target.value)}
                 dir="ltr"
                 style={{ textAlign: 'left' }}
               />

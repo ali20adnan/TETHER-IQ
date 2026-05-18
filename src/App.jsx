@@ -10,7 +10,7 @@ const BuyPage = lazy(() => import('./pages/BuyPage'));
 const OrderTrackPage = lazy(() => import('./pages/OrderTrackPage'));
 const MyOrdersPage = lazy(() => import('./pages/MyOrdersPage'));
 const LegalPage = lazy(() => import('./pages/LegalPage'));
-const AdminCrmPage = lazy(() => import('./pages/AdminCrmPage'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const SellerPage = lazy(() => import('./pages/SellerPage'));
 const ChatWidget = lazy(() => import('./components/ChatWidget'));
 
@@ -121,7 +121,8 @@ export default function App() {
             <Route path="/terms" element={<LegalPage doc="terms" />} />
             <Route path="/disclaimer" element={<LegalPage doc="disclaimer" />} />
             <Route path="/about" element={<LegalPage doc="about" />} />
-            <Route path="/admin/crm" element={<AdminCrmPage />} />
+            <Route path="/admin/crm" element={<AdminDashboard />} />
+            <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/seller" element={<SellerPage />} />
             <Route path="*" element={<HomePage />} />
           </Routes>
