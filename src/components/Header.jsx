@@ -224,34 +224,17 @@ function Logo({ navigate }) {
       aria-label="TETHER IQ - Home"
     >
       {/* حاوية بأبعاد ثابتة تمنع وميض التشويه قبل اكتمال تحميل الصورة / CSS */}
-      <span
-        className="header-logo-slot"
-        style={{
-          display: 'block',
-          width: 160,
-          height: 48,
-          flexShrink: 0,
-          lineHeight: 0,
-          overflow: 'hidden',
-        }}
-      >
-        <picture style={{ display: 'block', width: '100%', height: '100%' }}>
+      <span className="header-logo-slot">
+        <picture>
           <source type="image/webp" srcSet="/logo.webp" />
           <img
             className="header-logo-img"
             src="/logo.png"
             alt="TETHER IQ"
-            width={160}
-            height={48}
+            width={200}
+            height={60}
             fetchPriority="high"
             decoding="async"
-            style={{
-              display: 'block',
-              width: '100%',
-              height: '100%',
-              objectFit: 'contain',
-              objectPosition: 'center',
-            }}
           />
         </picture>
       </span>

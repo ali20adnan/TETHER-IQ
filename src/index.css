@@ -47,7 +47,9 @@
 
   --radius-button: 10px;
   --radius-card: 14px;
-  --header-height: 60px;
+  --header-height: 64px;
+  --header-logo-height: calc(var(--header-height) - 12px);
+  --header-logo-width: min(220px, 26vw);
   /* Reserve space above safe-area when home sticky CTA is shown (see HomePage) */
   --sticky-mobile-cta-reserve: 0px;
 }
@@ -372,14 +374,14 @@ body::after {
   opacity: 0.88;
 }
 
-/* صندوق ثابت للشعار: يحجز المساحة فوراً ويمنع تمدد الصورة لجزء من الثانية عند الرفرش */
+/* صندوق الشعار: الارتفاع يتبع الهيدر والعرض متناسب معه */
 .header-logo-slot {
   display: block;
-  width: 160px;
-  height: 48px;
   flex-shrink: 0;
   line-height: 0;
-  overflow: hidden;
+  height: var(--header-logo-height);
+  width: var(--header-logo-width);
+  max-width: 100%;
 }
 
 .header-logo-slot picture {
@@ -394,6 +396,20 @@ body::after {
   height: 100%;
   object-fit: contain;
   object-position: center;
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --header-height: 72px;
+    --header-logo-width: min(240px, 18vw);
+  }
+}
+
+@media (max-width: 900px) {
+  :root {
+    --header-height: 60px;
+    --header-logo-width: min(168px, 42vw);
+  }
 }
 
 .header-mobile-actions {
@@ -4246,16 +4262,20 @@ h3 { font-size: 1.25rem; }
 .admin-sidebar__brand {
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 0.45rem;
-  padding: 0 0.15rem 0.85rem;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.25rem 0.85rem;
   margin-bottom: 0.5rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   overflow: visible;
+  text-align: center;
 }
 
 .admin-sidebar__logo-link {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
   flex-shrink: 0;
   line-height: 0;
   text-decoration: none;
@@ -4263,19 +4283,18 @@ h3 { font-size: 1.25rem; }
 
 .admin-sidebar__logo-img {
   display: block;
-  width: 100%;
-  max-width: 148px;
+  width: min(100%, 200px);
   height: auto;
-  max-height: 42px;
+  max-height: clamp(40px, 8vw, 52px);
   object-fit: contain;
-  object-position: right center;
+  object-position: center;
 }
 
 .admin-sidebar__brand-tag {
   margin: 0;
   font-size: 0.78rem;
   color: #94a3b8;
-  text-align: start;
+  text-align: center;
 }
 
 .admin-sidebar__nav {
@@ -4539,8 +4558,8 @@ h3 { font-size: 1.25rem; }
   }
 
   .admin-sidebar__logo-img {
-    max-width: 132px;
-    max-height: 38px;
+    width: min(100%, 180px);
+    max-height: 44px;
   }
 
   .admin-sidebar__nav {
@@ -4560,5 +4579,73 @@ h3 { font-size: 1.25rem; }
 @media (max-width: 480px) {
   .admin-sidebar__desc {
     display: none;
+  }
+}
+
+.admin-card-detail {
+  margin: 0 0 1rem;
+  padding: 1rem;
+  border: 1px solid rgba(0, 229, 255, 0.22);
+}
+
+.admin-card-detail__title {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  color: #00e5ff;
+}
+
+.admin-card-detail__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.admin-card-detail__row {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) minmax(0, 2fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.45rem 0.5rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.admin-card-detail__label {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.admin-card-detail__value {
+  font-size: 0.88rem;
+  color: #f1f5f9;
+  word-break: break-all;
+}
+
+.admin-card-detail__copy {
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  background: rgba(0, 229, 255, 0.08);
+  color: #00e5ff;
+  border-radius: 6px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.72rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.admin-card-detail__copy:hover {
+  background: rgba(0, 229, 255, 0.16);
+}
+
+.admin-table tbody tr {
+  cursor: pointer;
+}
+
+.admin-table__row--active {
+  background: rgba(0, 229, 255, 0.08);
+}
+
+@media (max-width: 720px) {
+  .admin-card-detail__row {
+    grid-template-columns: 1fr;
   }
 }
