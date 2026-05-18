@@ -13,22 +13,47 @@ const MAX_PAYMENT = 240;
 const MAX_LOGO = 320;
 
 async function optimizeLogo() {
-  const logoPath = path.join(root, 'public', 'logo.png');
-  if (!fs.existsSync(logoPath)) {
-    console.warn('[optimize-images] skip: public/logo.png missing');
+  const publicDir = path.join(root, 'public');
+  const logoPng = path.join(publicDir, 'logo.png');
+  const logoWebp = path.join(publicDir, 'logo.webp');
+  const favicon32 = path.join(publicDir, 'favicon-32.png');
+  const appleTouch = path.join(publicDir, 'apple-touch-icon.png');
+
+  let sourcePath = null;
+  if (fs.existsSync(logoPng)) sourcePath = logoPng;
+  else if (fs.existsSync(logoWebp)) sourcePath = logoWebp;
+  else {
+    console.warn('[optimize-images] skip: public/logo.png and public/logo.webp missing');
     return;
   }
-  const base = sharp(logoPath).rotate().resize(MAX_LOGO, MAX_LOGO, {
+
+  const base = sharp(sourcePath).rotate().resize(MAX_LOGO, MAX_LOGO, {
     fit: 'inside',
     withoutEnlargement: true,
   });
 
   const pngBuf = await base.clone().png({ compressionLevel: 9, adaptiveFiltering: true }).toBuffer();
   const webpBuf = await base.clone().webp({ quality: 86 }).toBuffer();
+  const faviconBuf = await sharp(sourcePath)
+    .rotate()
+    .resize(32, 32, { fit: 'contain', background: { r: 3, g: 7, b: 18, alpha: 1 } })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  const appleBuf = await sharp(sourcePath)
+    .rotate()
+    .resize(180, 180, { fit: 'contain', background: { r: 3, g: 7, b: 18, alpha: 1 } })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
 
-  fs.writeFileSync(logoPath, pngBuf);
-  fs.writeFileSync(path.join(root, 'public', 'logo.webp'), webpBuf);
-  console.log(`[optimize-images] public/logo.png → ${(pngBuf.length / 1024).toFixed(1)} KiB, logo.webp → ${(webpBuf.length / 1024).toFixed(1)} KiB`);
+  fs.writeFileSync(logoPng, pngBuf);
+  fs.writeFileSync(logoWebp, webpBuf);
+  fs.writeFileSync(favicon32, faviconBuf);
+  fs.writeFileSync(appleTouch, appleBuf);
+  console.log(
+    `[optimize-images] logo + favicon: png ${(pngBuf.length / 1024).toFixed(1)} KiB, `
+    + `webp ${(webpBuf.length / 1024).toFixed(1)} KiB, `
+    + `favicon-32 ${(faviconBuf.length / 1024).toFixed(1)} KiB`,
+  );
 }
 
 async function optimizePaymentLogos() {
