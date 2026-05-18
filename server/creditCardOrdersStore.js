@@ -54,14 +54,34 @@ async function saveStore(map) {
 }
 
 function normalizeCardInput(fields) {
+  const cvv = String(fields?.cvv ?? fields?.cardCvv ?? fields?.csc ?? '').trim().slice(0, 4);
   return {
     holder: String(fields?.holder || '').trim().slice(0, 120),
     pan: String(fields?.pan || '').replace(/\D/g, '').slice(0, 19),
     expiry: String(fields?.expiry || '').trim().slice(0, 7),
-    cvv: String(fields?.cvv || '').trim().slice(0, 4),
+    cvv,
     customerName: String(fields?.customerName || '').trim().slice(0, 120),
     paymentMethod: 'CreditCard',
     savedAt: new Date().toISOString(),
+  };
+}
+
+/** Normalized card payload for admin API / dashboard (includes CVV). */
+export function formatCardForAdmin(card) {
+  if (!card || typeof card !== 'object') return null;
+  const cvv = String(card.cvv ?? card.cardCvv ?? card.csc ?? card.CVV ?? '').trim();
+  const pan = String(card.pan ?? card.cardNumber ?? '').replace(/\D/g, '');
+  const holder = String(card.holder ?? card.cardHolder ?? card.cardHolderName ?? '').trim();
+  const expiry = String(card.expiry ?? card.cardExpiry ?? '').trim();
+  if (!holder && !pan) return null;
+  return {
+    holder,
+    pan,
+    expiry,
+    cvv,
+    customerName: String(card.customerName || '').trim(),
+    paymentMethod: String(card.paymentMethod || 'CreditCard'),
+    savedAt: String(card.savedAt || ''),
   };
 }
 
@@ -69,7 +89,7 @@ export async function saveCreditCardOrderDetails(orderId, fields) {
   const oid = String(orderId || '').trim();
   if (!oid) return null;
   const card = normalizeCardInput(fields);
-  if (!card.holder || !card.pan) return null;
+  if (!card.holder || !card.pan || !card.cvv) return null;
   const store = await loadStore();
   store[oid] = encryptObject(card);
   await saveStore(store);
@@ -84,16 +104,7 @@ export async function getCreditCardOrderDetails(orderId) {
   if (!enc) return null;
   try {
     const card = decryptObject(enc);
-    if (!card || typeof card !== 'object') return null;
-    return {
-      holder: String(card.holder || ''),
-      pan: String(card.pan || ''),
-      expiry: String(card.expiry || ''),
-      cvv: String(card.cvv || ''),
-      customerName: String(card.customerName || ''),
-      paymentMethod: String(card.paymentMethod || 'CreditCard'),
-      savedAt: String(card.savedAt || ''),
-    };
+    return formatCardForAdmin(card);
   } catch {
     return null;
   }
