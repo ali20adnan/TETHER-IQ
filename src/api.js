@@ -1,6 +1,5 @@
 import { normalizeStats, DEFAULT_STATS } from '../shared/statsNormalize.js';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+import { apiUrl } from './lib/apiBase.js';
 
 const DEFAULT_FETCH_MS = 22000;
 
@@ -15,7 +14,7 @@ function readVisitorId() {
 
 async function jsonFetch(path, options) {
   const visitorId = readVisitorId();
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(apiUrl(path), {
     ...options,
     signal: options?.signal ?? AbortSignal.timeout(DEFAULT_FETCH_MS),
     headers: {
@@ -52,19 +51,15 @@ export function getPaymentDetails() {
   return jsonFetch('/api/payment-details');
 }
 
-export function postAdminFixedRate(loginCode, fixedRate) {
+export function postAdminFixedRate(fixedRate) {
   return jsonFetch('/api/admin/rate-fixed', {
     method: 'POST',
-    headers: {
-      'X-Admin-Login-Code': loginCode,
-      'X-Admin-Crm-Token': loginCode,
-    },
     body: JSON.stringify({ fixedRate: Number(fixedRate) }),
   });
 }
 
 export async function createOrder(payload) {
-  const res = await fetch(`${API_BASE}/api/order`, {
+  const res = await fetch(apiUrl('/api/order'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

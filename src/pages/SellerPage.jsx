@@ -3,14 +3,11 @@ import { Link } from 'react-router-dom';
 import { getPaymentDetails, postAdminFixedRate } from '../api';
 import { translations } from '../translations';
 
-import { readStoredLoginCode, storeLoginCode } from '../lib/adminApi';
-
 export default function SellerPage() {
   const [lang, setLang] = useState(() => localStorage.getItem('lang') || 'ar');
   const t = translations[lang];
   const isRtl = lang === 'ar';
 
-  const [loginCode, setLoginCode] = useState(() => readStoredLoginCode());
   const [draft, setDraft] = useState('');
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
@@ -32,19 +29,13 @@ export default function SellerPage() {
     e.preventDefault();
     setMsg('');
     setErr('');
-    const code = loginCode.trim();
-    if (!code) {
-      setErr(t.sellerNeedToken);
-      return;
-    }
     const v = Number(String(draft).replace(/,/g, ''));
     if (!Number.isFinite(v) || v < 1) {
       setErr(t.sellerInvalidRate);
       return;
     }
     try {
-      const r = await postAdminFixedRate(code, v);
-      storeLoginCode(code);
+      const r = await postAdminFixedRate(v);
       setDraft(String(r.rate ?? r.fixedRate ?? v));
       setMsg(t.sellerSaved);
     } catch (e2) {
@@ -70,20 +61,6 @@ export default function SellerPage() {
           </p>
 
           <form onSubmit={onSave} className="flex flex-col gap-3">
-            <div className="input-group">
-              <label className="input-label" style={{ textAlign: isRtl ? 'right' : 'left' }}>
-                {t.sellerToken}
-              </label>
-              <input
-                type="password"
-                className="input-control"
-                autoComplete="off"
-                value={loginCode}
-                onChange={(e) => setLoginCode(e.target.value)}
-                dir="ltr"
-                style={{ textAlign: 'left' }}
-              />
-            </div>
             <div className="input-group">
               <label className="input-label" style={{ textAlign: isRtl ? 'right' : 'left' }}>
                 {t.sellerRate}

