@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+import { apiUrl } from './lib/apiBase.js';
 
 export function getOrCreateVisitorId() {
   try {
@@ -22,7 +22,7 @@ export function trackPageVisit(pagePath, lang) {
     visitorId: getOrCreateVisitorId(),
     referrer: typeof document !== 'undefined' ? (document.referrer || '').slice(0, 300) : '',
   };
-  fetch(`${API_BASE}/api/track-visit`, {
+  fetch(apiUrl('/api/track-visit'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
