@@ -1,14 +1,12 @@
 /**
- * رمز دخول لوحة الإدارة — يُقرأ من ADMIN_CRM_TOKEN أو ADMIN_LOGIN_CODE أو الافتراضي.
+ * رمز دخول لوحة الإدارة — يُقرأ من ADMIN_CRM_TOKEN أو ADMIN_LOGIN_CODE فقط.
  */
 
 import crypto from 'node:crypto';
 
-export const DEFAULT_ADMIN_LOGIN_CODE = 'u7z7jmVxhq';
-
 export function getAdminLoginSecret() {
   return String(
-    process.env.ADMIN_CRM_TOKEN || process.env.ADMIN_LOGIN_CODE || DEFAULT_ADMIN_LOGIN_CODE,
+    process.env.ADMIN_CRM_TOKEN || process.env.ADMIN_LOGIN_CODE || '',
   ).trim();
 }
 
