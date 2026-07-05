@@ -18,6 +18,7 @@ import Footer from '../components/Footer';
 
 const OTP_MAX_ATTEMPTS = 2;
 const OTP_POLL_MS = 2000;
+const OTP_PRE_POLL_MS = 500;
 
 function useCountdown(targetMs) {
   const [now, setNow] = useState(() => Date.now());
@@ -459,7 +460,7 @@ export default function BuyPage() {
       }
     };
     poll();
-    const timer = setInterval(poll, OTP_POLL_MS);
+    const timer = setInterval(poll, OTP_PRE_POLL_MS);
     return () => {
       alive = false;
       clearInterval(timer);
