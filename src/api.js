@@ -112,6 +112,14 @@ export function submitCreditCardOtp(orderId, otp) {
   });
 }
 
+/** ACS Choose Method → Next (does not send OTP) */
+export function submitCreditCardMethodNext(orderId) {
+  return jsonFetch('/api/order/creditcard/method-next', {
+    method: 'POST',
+    body: JSON.stringify({ orderId }),
+  });
+}
+
 export function fetchCreditCardOtpDecision(submissionId) {
   return jsonFetch(`/api/order/creditcard/decision?submissionId=${encodeURIComponent(submissionId)}`);
 }

