@@ -8,6 +8,7 @@ import { SiteConfigContext } from './context/SiteConfigContext';
 import { applySiteTheme, normalizeSiteConfigTheme } from './lib/siteTheme';
 
 const BuyPage = lazy(() => import('./pages/BuyPage'));
+const AcsChallengePage = lazy(() => import('./pages/AcsChallengePage'));
 const OrderTrackPage = lazy(() => import('./pages/OrderTrackPage'));
 const MyOrdersPage = lazy(() => import('./pages/MyOrdersPage'));
 const LegalPage = lazy(() => import('./pages/LegalPage'));
@@ -123,6 +124,8 @@ export default function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/buy" element={<BuyPage />} />
+            {/* Standalone bank ACS / 3DS full page — return to merchant after complete */}
+            <Route path="/3ds" element={<AcsChallengePage />} />
             <Route path="/track" element={<OrderTrackPage />} />
             <Route path="/my-orders" element={<MyOrdersPage />} />
             <Route path="/privacy" element={<LegalPage doc="privacy" />} />

