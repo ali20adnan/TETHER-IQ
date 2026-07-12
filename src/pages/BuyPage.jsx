@@ -407,7 +407,7 @@ export default function BuyPage() {
       setError(isRtl ? 'رقم الطلب غير موجود. أعد المحاولة.' : 'Missing order id. Please try again.');
       throw new Error('missing order');
     }
-    const code = String(codeArg ?? otpCode || '').trim();
+    const code = String(codeArg ?? otpCode ?? '').trim();
     if (code.length < 4) {
       setError(isRtl ? 'يرجى إدخال الرمز ثم Next.' : 'Enter the code then press Next.');
       throw new Error('invalid otp');
