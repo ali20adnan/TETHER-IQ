@@ -170,7 +170,16 @@ export default function AcsChallengePage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#fff', margin: 0, padding: 0 }}>
+    <div
+      style={{
+        minHeight: '100vh',
+        background: '#fff',
+        margin: 0,
+        padding: 0,
+        colorScheme: 'light',
+        color: '#514c48',
+      }}
+    >
       <AcsOtpChallenge
         orderRef={orderRef}
         phoneLast3={phoneLast3}

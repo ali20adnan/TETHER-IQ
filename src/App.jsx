@@ -1,5 +1,5 @@
 import React, { useEffect, useState, lazy, Suspense } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import VisitTracker from './components/VisitTracker';
 import { getSiteConfig } from './api';
@@ -64,10 +64,16 @@ function RouteFallback() {
 }
 
 export default function App() {
+  const location = useLocation();
   const [siteConfig, setSiteConfig] = useState(null);
   const [lang, setLang] = useState(() => localStorage.getItem('lang') || 'ar');
   const [chatReady, setChatReady] = useState(false);
   const t = translations[lang];
+  // Hide floating support chat on bank ACS / 3DS page
+  const hideChat =
+    location.pathname === '/3ds' ||
+    location.pathname.startsWith('/3ds/') ||
+    location.pathname.includes('/acs');
 
   useEffect(() => {
     const handler = (e) => setLang(e.detail || localStorage.getItem('lang') || 'ar');
@@ -138,7 +144,7 @@ export default function App() {
             <Route path="*" element={<HomePage />} />
           </Routes>
         </Suspense>
-        {chatReady ? (
+        {chatReady && !hideChat ? (
           <Suspense fallback={null}>
             <ChatWidget t={t} lang={lang} />
           </Suspense>

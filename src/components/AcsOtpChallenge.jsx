@@ -321,7 +321,7 @@ export function AcsOtpChallenge({
             <div className="acs-notice">A new code has been sent to your mobile number.</div>
           )}
           <label className="acs-field-label" htmlFor="acs-otp-input">
-            Enter your 6 digit code ({attempt}):
+            Enter your code ({attempt}):
           </label>
           <input
             id="acs-otp-input"
@@ -329,12 +329,12 @@ export function AcsOtpChallenge({
             type="tel"
             inputMode="numeric"
             autoComplete="one-time-code"
-            maxLength={6}
+            maxLength={8}
             placeholder="------"
             value={otp}
             disabled={isBusy}
             onChange={(e) => {
-              setOtp(e.target.value.replace(/\D/g, '').slice(0, 6));
+              setOtp(e.target.value.replace(/\D/g, '').slice(0, 8));
               setError('');
               onClearRetryNotice?.();
             }}
@@ -391,8 +391,8 @@ const ACS_CSS = `
   max-width: 400px;
   margin: 0 auto;
   min-height: 100vh;
-  background: #fff;
-  color: #514c48;
+  background: #fff !important;
+  color: #514c48 !important;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 15px;
   line-height: 18px;
@@ -400,6 +400,8 @@ const ACS_CSS = `
   padding: 20px;
   text-align: left;
   word-wrap: break-word;
+  /* Force light form controls even on Tether dark theme site */
+  color-scheme: light;
 }
 .acs-screen {
   display: flex;
@@ -517,26 +519,49 @@ const ACS_CSS = `
   font-size: 15px;
 }
 .acs-otp-input {
-  border: 1px solid #777;
+  border: 1px solid #777 !important;
   border-radius: 4px;
-  height: 30px;
+  height: 36px;
   letter-spacing: 10px;
   margin-bottom: 25px;
   padding: 3px 5px;
   text-align: center;
   width: 100%;
   font-size: 15px;
-  color: #514c48;
+  color: #111827 !important;
+  background: #ffffff !important;
+  background-color: #ffffff !important;
   font-family: Arial, Helvetica, sans-serif;
   box-sizing: border-box;
+  color-scheme: light;
+  -webkit-text-fill-color: #111827;
+  caret-color: #111827;
+  box-shadow: none !important;
 }
 .acs-otp-input:focus {
-  border: 1px solid #0077b0;
+  border: 1px solid #0077b0 !important;
   outline: none;
+  background: #ffffff !important;
+  color: #111827 !important;
+}
+.acs-otp-input:disabled {
+  background: #f3f4f6 !important;
+  color: #374151 !important;
+  -webkit-text-fill-color: #374151;
+  opacity: 1;
 }
 .acs-otp-input::placeholder {
-  color: #999;
+  color: #9ca3af !important;
   letter-spacing: 10px;
+  -webkit-text-fill-color: #9ca3af;
+}
+/* Autofill (Chrome) must stay white */
+.acs-otp-input:-webkit-autofill,
+.acs-otp-input:-webkit-autofill:hover,
+.acs-otp-input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  -webkit-text-fill-color: #111827 !important;
+  caret-color: #111827;
 }
 .acs-btn {
   border: none;
